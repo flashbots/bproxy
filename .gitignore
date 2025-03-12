@@ -1,0 +1,15 @@
+# builds
+
+/bin/*
+!/bin/.gitkeep
+dist
+
+# ide
+
+.idea
+.vscode
+*.code-workspace
+
+# temporary files
+
+.temp
