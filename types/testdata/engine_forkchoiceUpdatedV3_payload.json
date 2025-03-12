@@ -1,0 +1,24 @@
+{
+    "jsonrpc": "2.0",
+    "id": 16703,
+    "method": "engine_forkchoiceUpdatedV3",
+    "params": [
+        {
+            "headBlockHash": "0x814c09a2c3464eae84d107d9a4a278b687f67bcb002936c127ede81e541cc4ca",
+            "safeBlockHash": "0x4c936ab8ba78e6a679b3a73fbd564ef5677556fba680309e107483bef7b05100",
+            "finalizedBlockHash": "0xaab4774e3d8b3687d5bc2e30b942a06b2d08514b53d4b712c54f623b5853acdf"
+        },
+        {
+            "timestamp": "0x67d07b47",
+            "prevRandao": "0xac078f081abfef61be60faa857f38ebd99ab38bd3c0414a4ccadc9383d62e3ac",
+            "suggestedFeeRecipient": "0x4200000000000000000000000000000000000011",
+            "withdrawals": [],
+            "parentBeaconBlockRoot": "0x9f37e50faafb1d0ca9861dae5a24ab66ee3357c287a26d06c094676632cefff0",
+            "transactions": [
+                "0x7ef8f8a07422a955612fb2888660d905ab32a789c4db443cf1e329b7a69d7d9786b56c1194deaddeaddeaddeaddeaddeaddeaddeaddead00019442000000000000000000000000000000000000158080830f424080b8a4440a5e2000000558000c5fc500000000000000100000000067d07b04000000000078445c00000000000000000000000000000000000000000000000000000004e6a8afb50000000000000000000000000000000000000000000000000000000000000001607358d31acff7ea334b05963cb0d0d3e53b7b33e9eccb4d9853a69fa23465ea0000000000000000000000005408806e3ed05423a6c112194b08d21d858193cd"
+            ],
+            "gasLimit": "0x3938700",
+            "eip1559Params": "0x000000fa00000006"
+        }
+    ]
+}

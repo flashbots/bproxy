@@ -1,0 +1,50 @@
+env:
+  - CGO_ENABLED=0
+
+builds:
+  - main: ./cmd
+    ldflags:
+      - -s
+      - -w
+      - -X main.version={{ .Version }}
+    targets:
+      - linux_amd64
+      - linux_arm64
+
+archives:
+  - id: zip
+    format: zip
+    name_template: "{{ .ProjectName }}_{{ .Os }}_{{ .Arch }}"
+    files:
+      - none*
+
+checksum:
+  name_template: 'checksums.txt'
+
+release:
+  prerelease: auto
+
+dockers:
+  - dockerfile: Dockerfile.goreleaser
+    goarch: amd64
+    goos: linux
+    use: buildx
+    build_flag_templates:
+      - --platform=linux/amd64
+    image_templates:
+      - "ghcr.io/flashbots/bproxy:{{ .Tag }}-amd64"
+
+  - dockerfile: Dockerfile.goreleaser
+    goarch: arm64
+    goos: linux
+    use: buildx
+    build_flag_templates:
+      - --platform=linux/arm64
+    image_templates:
+      - "ghcr.io/flashbots/bproxy:{{ .Tag }}-arm64"
+
+docker_manifests:
+  - name_template: "ghcr.io/flashbots/bproxy:{{ .Tag }}"
+    image_templates:
+      - "ghcr.io/flashbots/bproxy:{{ .Tag }}-amd64"
+      - "ghcr.io/flashbots/bproxy:{{ .Tag }}-arm64"

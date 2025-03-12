@@ -1,0 +1,13 @@
+{
+    "jsonrpc": "2.0",
+    "id": 960223,
+    "method": "engine_forkchoiceUpdatedV3",
+    "params": [
+        {
+            "headBlockHash": "0x814c09a2c3464eae84d107d9a4a278b687f67bcb002936c127ede81e541cc4ca",
+            "safeBlockHash": "0x4c936ab8ba78e6a679b3a73fbd564ef5677556fba680309e107483bef7b05100",
+            "finalizedBlockHash": "0xaab4774e3d8b3687d5bc2e30b942a06b2d08514b53d4b712c54f623b5853acdf"
+        },
+        null
+    ]
+}
