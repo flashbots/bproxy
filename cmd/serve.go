@@ -39,6 +39,15 @@ func CommandServe(cfg *config.Config) *cli.Command {
 			Value:       "0.0.0.0:8551",
 		},
 
+		&cli.BoolFlag{
+			Category:    strings.ToUpper(categoryAuthRPC),
+			Destination: &cfg.AuthRpcProxy.LogResponses,
+			EnvVars:     []string{envPrefix + strings.ToUpper(categoryAuthRPC) + "_LOG_RESPONSES"},
+			Name:        categoryAuthRPC + "-log-responses",
+			Usage:       "whether to log responses to proxied/mirrored authrpc requests",
+			Value:       false,
+		},
+
 		&cli.StringSliceFlag{
 			Category:    strings.ToUpper(categoryAuthRPC),
 			Destination: peersAuthRPC,
@@ -74,6 +83,15 @@ func CommandServe(cfg *config.Config) *cli.Command {
 			Name:        categoryRPC + "-listen-address",
 			Usage:       "`host:port` for rpc proxy",
 			Value:       "0.0.0.0:8545",
+		},
+
+		&cli.BoolFlag{
+			Category:    strings.ToUpper(categoryRPC),
+			Destination: &cfg.AuthRpcProxy.LogResponses,
+			EnvVars:     []string{envPrefix + strings.ToUpper(categoryRPC) + "_LOG_RESPONSES"},
+			Name:        categoryRPC + "-log-responses",
+			Usage:       "whether to log responses to proxied/mirrored rpc requests",
+			Value:       false,
 		},
 
 		&cli.StringSliceFlag{

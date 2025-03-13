@@ -32,6 +32,7 @@ type Proxy struct {
 type Config struct {
 	Name          string
 	ListenAddress string
+	LogResponses  bool
 
 	BackendURI string
 	PeerURIs   []string
@@ -143,19 +144,32 @@ func (p *Proxy) handle(ctx *fasthttp.RequestCtx) {
 		req.Header.Add("x-forwarded-proto", str(ctx.Request.URI().Scheme()))
 
 		go func() {
-			if err := p.backend.Do(req, res); err == nil {
+			err := p.backend.Do(req, res)
+
+			loggedFields := make([]zap.Field, 0, 8)
+
+			loggedFields = append(loggedFields,
+				zap.String("jrpc_method", jrpcMethod),
+				zap.Uint64("jrpc_id", jrpcID),
+				zap.Uint64("http_upstream_connection_id", connectionID),
+				zap.String("http_upstream_ip", ctx.RemoteIP().String()),
+				zap.String("http_downstream_host", str(p.backendURI.Host())),
+			)
+
+			if err == nil {
 				res.CopyTo(&ctx.Response)
 
-				l.Info("Proxied the request",
-					zap.Uint64("http_upstream_connection_id", connectionID),
-					zap.String("http_upstream_ip", ctx.RemoteIP().String()),
-					zap.String("http_downstream_host", str(p.backendURI.Host())),
-					zap.String("http_method", str(ctx.Method())),
-					zap.String("http_path", str(ctx.Path())),
+				loggedFields = append(loggedFields,
 					zap.Int("http_status", res.StatusCode()),
-					zap.String("jrpc_method", jrpcMethod),
-					zap.Uint64("jrpc_id", jrpcID),
 				)
+
+				if p.cfg.LogResponses {
+					loggedFields = append(loggedFields,
+						zap.String("http_response", str(res.Body())),
+					)
+				}
+
+				l.Info("Proxied the request", loggedFields...)
 
 				metrics.ProxySuccessCount.Add(context.Background(), 1, otelapi.WithAttributes(
 					attribute.KeyValue{Key: "proxy", Value: attribute.StringValue(p.cfg.Name)},
@@ -166,16 +180,11 @@ func (p *Proxy) handle(ctx *fasthttp.RequestCtx) {
 				ctx.SetStatusCode(fasthttp.StatusBadGateway)
 				fmt.Fprint(ctx, err.Error())
 
-				l.Error("Failed to proxy the request",
-					zap.Uint64("http_upstream_connection_id", connectionID),
-					zap.String("http_upstream_ip", ctx.RemoteIP().String()),
-					zap.String("http_downstream_host", str(p.backendURI.Host())),
-					zap.String("http_method", str(ctx.Method())),
-					zap.String("http_path", str(ctx.Path())),
-					zap.String("jrpc_method", jrpcMethod),
-					zap.Uint64("jrpc_id", jrpcID),
+				loggedFields = append(loggedFields,
 					zap.Error(err),
 				)
+
+				l.Error("Failed to proxy the request", loggedFields...)
 
 				metrics.ProxyFailureCount.Add(context.Background(), 1, otelapi.WithAttributes(
 					attribute.KeyValue{Key: "proxy", Value: attribute.StringValue(p.cfg.Name)},
@@ -199,16 +208,33 @@ func (p *Proxy) handle(ctx *fasthttp.RequestCtx) {
 			req.Header.Add("x-forwarded-proto", str(ctx.Request.URI().Scheme()))
 
 			go func() {
-				// must not hold references to ctx down here
+				//
+				// NOTE: must _not_ use (or hold references to) `ctx` down here
+				//
 
-				if err := p.backend.Do(req, res); err == nil {
-					l.Info("Mirrored the request",
-						zap.Uint64("http_upstream_connection_id", connectionID),
-						zap.String("http_downstream_host", str(uri.Host())),
+				err := p.backend.Do(req, res)
+
+				loggedFields := make([]zap.Field, 0, 8)
+
+				loggedFields = append(loggedFields,
+					zap.String("jrpc_method", jrpcMethod),
+					zap.Uint64("jrpc_id", jrpcID),
+					zap.Uint64("http_upstream_connection_id", connectionID),
+					zap.String("http_downstream_host", str(uri.Host())),
+				)
+
+				if err == nil {
+					loggedFields = append(loggedFields,
 						zap.Int("http_status", res.StatusCode()),
-						zap.String("jrpc_method", jrpcMethod),
-						zap.Uint64("jrpc_id", jrpcID),
 					)
+
+					if p.cfg.LogResponses {
+						loggedFields = append(loggedFields,
+							zap.String("http_response", str(res.Body())),
+						)
+					}
+
+					l.Info("Mirrored the request", loggedFields...)
 
 					metrics.MirrorSuccessCount.Add(context.Background(), 1, otelapi.WithAttributes(
 						attribute.KeyValue{Key: "proxy", Value: attribute.StringValue(p.cfg.Name)},
@@ -217,11 +243,11 @@ func (p *Proxy) handle(ctx *fasthttp.RequestCtx) {
 						attribute.KeyValue{Key: "http_status", Value: attribute.IntValue(res.StatusCode())},
 					))
 				} else {
-					l.Error("Failed to mirror the request",
-						zap.Uint64("http_upstream_connection_id", connectionID),
-						zap.String("http_downstream_host", str(uri.Host())),
+					loggedFields = append(loggedFields,
 						zap.Error(err),
 					)
+
+					l.Error("Failed to mirror the request", loggedFields...)
 
 					metrics.MirrorFailureCount.Add(context.Background(), 1, otelapi.WithAttributes(
 						attribute.KeyValue{Key: "proxy", Value: attribute.StringValue(p.cfg.Name)},
@@ -230,6 +256,8 @@ func (p *Proxy) handle(ctx *fasthttp.RequestCtx) {
 					))
 				}
 
+				_ = l.Sync()
+
 				fasthttp.ReleaseRequest(req)
 				fasthttp.ReleaseResponse(res)
 			}()
@@ -237,4 +265,6 @@ func (p *Proxy) handle(ctx *fasthttp.RequestCtx) {
 	}
 
 	wg.Wait()
+
+	_ = l.Sync()
 }

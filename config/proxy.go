@@ -12,6 +12,7 @@ import (
 type Proxy struct {
 	Backend                string   `yaml:"backend"`
 	ListenAddress          string   `yaml:"listen_address"`
+	LogResponses           bool     `yaml:"log_responses"`
 	Peers                  []string `yaml:"peers"`
 	RemoveBackendFromPeers bool     `yaml:"remove_backend_from_peers"`
 }
