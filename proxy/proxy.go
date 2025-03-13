@@ -158,6 +158,7 @@ func (p *Proxy) handle(ctx *fasthttp.RequestCtx) {
 				)
 
 				metrics.ProxySuccessCount.Add(context.Background(), 1, otelapi.WithAttributes(
+					attribute.KeyValue{Key: "proxy", Value: attribute.StringValue(p.cfg.Name)},
 					attribute.KeyValue{Key: "jrpc_method", Value: attribute.StringValue(jrpcMethod)},
 					attribute.KeyValue{Key: "http_status", Value: attribute.IntValue(res.StatusCode())},
 				))
@@ -177,6 +178,7 @@ func (p *Proxy) handle(ctx *fasthttp.RequestCtx) {
 				)
 
 				metrics.ProxyFailureCount.Add(context.Background(), 1, otelapi.WithAttributes(
+					attribute.KeyValue{Key: "proxy", Value: attribute.StringValue(p.cfg.Name)},
 					attribute.KeyValue{Key: "jrpc_method", Value: attribute.StringValue(jrpcMethod)},
 				))
 			}
@@ -209,6 +211,7 @@ func (p *Proxy) handle(ctx *fasthttp.RequestCtx) {
 					)
 
 					metrics.MirrorSuccessCount.Add(context.Background(), 1, otelapi.WithAttributes(
+						attribute.KeyValue{Key: "proxy", Value: attribute.StringValue(p.cfg.Name)},
 						attribute.KeyValue{Key: "downstream_host", Value: attribute.StringValue(str(uri.Host()))},
 						attribute.KeyValue{Key: "jrpc_method", Value: attribute.StringValue(jrpcMethod)},
 						attribute.KeyValue{Key: "http_status", Value: attribute.IntValue(res.StatusCode())},
@@ -221,6 +224,7 @@ func (p *Proxy) handle(ctx *fasthttp.RequestCtx) {
 					)
 
 					metrics.MirrorFailureCount.Add(context.Background(), 1, otelapi.WithAttributes(
+						attribute.KeyValue{Key: "proxy", Value: attribute.StringValue(p.cfg.Name)},
 						attribute.KeyValue{Key: "downstream_host", Value: attribute.StringValue(str(uri.Host()))},
 						attribute.KeyValue{Key: "jrpc_method", Value: attribute.StringValue(jrpcMethod)},
 					))

@@ -17,6 +17,10 @@ OPTIONS:
    --authrpc-peers urls [ --authrpc-peers urls ]  list of urls with authrpc peers to mirror the requests to [$BPROXY_AUTHRPC_PEERS]
    --authrpc-remove-backend-from-peers            remove backend from peers (default: false) [$BPROXY_AUTHRPC_REMOVE_BACKEND_FROM_PEERS]
 
+   METRICS
+
+   --metrics-listen-address host:port  host:port for metrics server (default: "0.0.0.0:6785") [$BPROXY_METRICS_LISTEN_ADDRESS]
+
    RPC
 
    --rpc-backend url                      url of backend rpc (default: "http://127.0.0.1:18551") [$BPROXY_RPC_BACKEND]
