@@ -34,22 +34,22 @@ func New(cfg *config.Config) (*Server, error) {
 	}
 
 	authrpc, err := proxy.New(&proxy.Config{
-		BackendURI:    cfg.Proxy.BackendAuthRPC,
-		ListenAddress: cfg.Proxy.ListenAddressAuthRPC,
+		BackendURI:    cfg.AuthRpcProxy.Backend,
+		ListenAddress: cfg.AuthRpcProxy.ListenAddress,
 		Name:          "bproxy-authrpc",
 		Parse:         s.parseAuthRpcCall,
-		PeerURIs:      cfg.Proxy.PeersAuthRPC,
+		PeerURIs:      cfg.AuthRpcProxy.Peers,
 	})
 	if err != nil {
 		return nil, err
 	}
 
 	rpc, err := proxy.New(&proxy.Config{
-		BackendURI:    cfg.Proxy.BackendRPC,
-		ListenAddress: cfg.Proxy.ListenAddressRPC,
+		BackendURI:    cfg.RpcProxy.Backend,
+		ListenAddress: cfg.RpcProxy.ListenAddress,
 		Name:          "bproxy-rpc",
 		Parse:         s.parseRpcCall,
-		PeerURIs:      cfg.Proxy.PeersRPC,
+		PeerURIs:      cfg.RpcProxy.Peers,
 	})
 	if err != nil {
 		return nil, err

@@ -84,6 +84,8 @@ func (p *Proxy) Run(ctx context.Context, failure chan<- error) {
 	go func() { // run the authrpc proxy
 		l.Info("Proxy is going up...",
 			zap.String("listen_address", p.cfg.ListenAddress),
+			zap.String("backend", p.cfg.BackendURI),
+			zap.Strings("peers", p.cfg.PeerURIs),
 		)
 		if err := p.frontend.ListenAndServe(p.cfg.ListenAddress); err != nil {
 			failure <- err

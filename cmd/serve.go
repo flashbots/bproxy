@@ -22,20 +22,20 @@ func CommandServe(cfg *config.Config) *cli.Command {
 	authrpcFlags := []cli.Flag{
 		&cli.StringFlag{
 			Category:    strings.ToUpper(categoryAuthRPC),
-			Destination: &cfg.Proxy.BackendAuthRPC,
+			Destination: &cfg.AuthRpcProxy.Backend,
 			EnvVars:     []string{envPrefix + strings.ToUpper(categoryAuthRPC) + "_BACKEND"},
 			Name:        categoryAuthRPC + "-backend",
 			Usage:       "`url` of backend authrpc",
-			Value:       "http://127.0.0.1:18545",
+			Value:       "http://127.0.0.1:18551",
 		},
 
 		&cli.StringFlag{
 			Category:    strings.ToUpper(categoryAuthRPC),
-			Destination: &cfg.Proxy.ListenAddressAuthRPC,
+			Destination: &cfg.AuthRpcProxy.ListenAddress,
 			EnvVars:     []string{envPrefix + strings.ToUpper(categoryAuthRPC) + "_LISTEN_ADDRESS"},
 			Name:        categoryAuthRPC + "-listen-address",
 			Usage:       "`host:port` for authrpc proxy",
-			Value:       "0.0.0.0:8545",
+			Value:       "0.0.0.0:8551",
 		},
 
 		&cli.StringSliceFlag{
@@ -45,25 +45,34 @@ func CommandServe(cfg *config.Config) *cli.Command {
 			Name:        categoryAuthRPC + "-peers",
 			Usage:       "list of `urls` with authrpc peers to mirror the requests to",
 		},
+
+		&cli.BoolFlag{
+			Category:    strings.ToUpper(categoryAuthRPC),
+			Destination: &cfg.AuthRpcProxy.RemoveBackendFromPeers,
+			EnvVars:     []string{envPrefix + strings.ToUpper(categoryAuthRPC) + "_REMOVE_BACKEND_FROM_PEERS"},
+			Name:        categoryAuthRPC + "-remove-backend-from-peers",
+			Usage:       "resolve backend from peers",
+			Value:       false,
+		},
 	}
 
 	rpcFlags := []cli.Flag{
 		&cli.StringFlag{
 			Category:    strings.ToUpper(categoryRPC),
-			Destination: &cfg.Proxy.BackendRPC,
+			Destination: &cfg.RpcProxy.Backend,
 			EnvVars:     []string{envPrefix + strings.ToUpper(categoryRPC) + "_BACKEND"},
 			Name:        categoryRPC + "-backend",
 			Usage:       "`url` of backend rpc",
-			Value:       "http://127.0.0.1:18551",
+			Value:       "http://127.0.0.1:18545",
 		},
 
 		&cli.StringFlag{
 			Category:    strings.ToUpper(categoryRPC),
-			Destination: &cfg.Proxy.ListenAddressRPC,
+			Destination: &cfg.RpcProxy.ListenAddress,
 			EnvVars:     []string{envPrefix + strings.ToUpper(categoryRPC) + "_LISTEN_ADDRESS"},
 			Name:        categoryRPC + "-listen-address",
 			Usage:       "`host:port` for rpc proxy",
-			Value:       "0.0.0.0:8551",
+			Value:       "0.0.0.0:8545",
 		},
 
 		&cli.StringSliceFlag{
@@ -72,6 +81,15 @@ func CommandServe(cfg *config.Config) *cli.Command {
 			EnvVars:     []string{envPrefix + strings.ToUpper(categoryRPC) + "_PEERS"},
 			Name:        categoryRPC + "-peers",
 			Usage:       "list of `urls` with rpc peers to mirror the requests to",
+		},
+
+		&cli.BoolFlag{
+			Category:    strings.ToUpper(categoryRPC),
+			Destination: &cfg.RpcProxy.RemoveBackendFromPeers,
+			EnvVars:     []string{envPrefix + strings.ToUpper(categoryRPC) + "_REMOVE_BACKEND_FROM_PEERS"},
+			Name:        categoryRPC + "-remove-backend-from-peers",
+			Usage:       "resolve backend from peers",
+			Value:       false,
 		},
 	}
 
@@ -86,8 +104,8 @@ func CommandServe(cfg *config.Config) *cli.Command {
 		Flags: flags,
 
 		Before: func(_ *cli.Context) error {
-			cfg.Proxy.PeersAuthRPC = peersAuthRPC.Value()
-			cfg.Proxy.PeersRPC = peersRPC.Value()
+			cfg.AuthRpcProxy.Peers = peersAuthRPC.Value()
+			cfg.RpcProxy.Peers = peersRPC.Value()
 
 			return cfg.Validate()
 		},

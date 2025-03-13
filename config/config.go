@@ -6,14 +6,18 @@ import (
 )
 
 type Config struct {
-	Log   *Log   `yaml:"log"`
-	Proxy *Proxy `yaml:"proxy"`
+	Log *Log `yaml:"log"`
+
+	AuthRpcProxy *Proxy `yaml:"authrpc_proxy"`
+	RpcProxy     *Proxy `yaml:"rpc_proxy"`
 }
 
 func New() *Config {
 	return &Config{
-		Log:   &Log{},
-		Proxy: &Proxy{},
+		Log: &Log{},
+
+		AuthRpcProxy: &Proxy{},
+		RpcProxy:     &Proxy{},
 	}
 }
 
