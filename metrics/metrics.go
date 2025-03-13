@@ -20,6 +20,10 @@ var (
 func Setup(ctx context.Context) error {
 	for _, setup := range []func(context.Context) error{
 		setupMeter, // must come first
+		setupProxySuccessCount,
+		setupProxyFailureCount,
+		setupMirrorSuccessCount,
+		setupMirrorFailureCount,
 	} {
 		if err := setup(ctx); err != nil {
 			return err
@@ -50,5 +54,49 @@ func setupMeter(ctx context.Context) error {
 
 	meter = provider.Meter(metricsNamespace)
 
+	return nil
+}
+
+func setupProxySuccessCount(ctx context.Context) error {
+	m, err := meter.Int64Counter("proxy_success_count",
+		otelapi.WithDescription("count of successfully proxied requests"),
+	)
+	if err != nil {
+		return err
+	}
+	ProxySuccessCount = m
+	return nil
+}
+
+func setupProxyFailureCount(ctx context.Context) error {
+	m, err := meter.Int64Counter("proxy_failure_count",
+		otelapi.WithDescription("count of failures to proxy the request"),
+	)
+	if err != nil {
+		return err
+	}
+	ProxyFailureCount = m
+	return nil
+}
+
+func setupMirrorSuccessCount(ctx context.Context) error {
+	m, err := meter.Int64Counter("mirror_success_count",
+		otelapi.WithDescription("count of successfully mirrored requests"),
+	)
+	if err != nil {
+		return err
+	}
+	MirrorSuccessCount = m
+	return nil
+}
+
+func setupMirrorFailureCount(ctx context.Context) error {
+	m, err := meter.Int64Counter("mirror_failure_count",
+		otelapi.WithDescription("count of failures to mirror the request"),
+	)
+	if err != nil {
+		return err
+	}
+	MirrorFailureCount = m
 	return nil
 }

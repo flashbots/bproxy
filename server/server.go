@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"errors"
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
@@ -10,8 +11,10 @@ import (
 
 	"github.com/flashbots/bproxy/config"
 	"github.com/flashbots/bproxy/logutils"
+	"github.com/flashbots/bproxy/metrics"
 	"github.com/flashbots/bproxy/proxy"
 	"github.com/flashbots/bproxy/types"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 
 	"github.com/goccy/go-json"
 	"go.uber.org/zap"
@@ -24,6 +27,8 @@ type Server struct {
 
 	authrpc *proxy.Proxy
 	rpc     *proxy.Proxy
+
+	metrics *http.Server
 }
 
 func New(cfg *config.Config) (*Server, error) {
@@ -58,12 +63,39 @@ func New(cfg *config.Config) (*Server, error) {
 	s.authrpc = authrpc
 	s.rpc = rpc
 
+	mux := http.NewServeMux()
+	mux.Handle("/", promhttp.Handler())
+	mux.Handle("/metrics", promhttp.Handler())
+
+	s.metrics = &http.Server{
+		Addr:              cfg.Metrics.ListenAddress,
+		Handler:           mux,
+		MaxHeaderBytes:    1024,
+		ReadHeaderTimeout: 30 * time.Second,
+		ReadTimeout:       30 * time.Second,
+		WriteTimeout:      30 * time.Second,
+	}
+
 	return s, nil
 }
 
 func (p *Server) Run() error {
 	l := p.logger
 	ctx := logutils.ContextWithLogger(context.Background(), l)
+
+	if err := metrics.Setup(ctx); err != nil {
+		return err
+	}
+
+	go func() { // run the metrics server
+		l.Info("Metrics server is going up...",
+			zap.String("server_listen_address", p.cfg.Metrics.ListenAddress),
+		)
+		if err := p.metrics.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			p.failure <- err
+		}
+		l.Info("Metrics server is down")
+	}()
 
 	p.authrpc.Run(ctx, p.failure)
 	p.rpc.Run(ctx, p.failure)
@@ -118,6 +150,16 @@ func (p *Server) Run() error {
 		}
 	}
 
+	{ // stop metrics server
+		ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+		defer cancel()
+		if err := p.metrics.Shutdown(ctx); err != nil {
+			l.Error("Metrics server shutdown failed",
+				zap.Error(err),
+			)
+		}
+	}
+
 	switch len(errs) {
 	default:
 		return errors.Join(errs...)
@@ -129,20 +171,26 @@ func (p *Server) Run() error {
 }
 
 func (s *Server) parseAuthRpcCall(body []byte) (bool, string, uint64) {
+	{
+		call := types.JrpcCall{}
+		if err := json.Unmarshal(body, &call); err != nil {
+			s.logger.Warn("Failed to parse authrpc call body",
+				zap.Error(err),
+			)
+			return false, "", 0
+		}
+
+		if call.Method != "engine_forkchoiceUpdatedV3" {
+			return false, call.Method, call.ID
+		}
+	}
+
 	call := types.EngineForkchoiceUpdatedV3{}
 	if err := json.Unmarshal(body, &call); err != nil {
 		s.logger.Warn("Failed to parse authrpc call body",
 			zap.Error(err),
 		)
 		return false, "", 0
-	}
-
-	if call.Version != "2.0" {
-		return false, call.Method, call.ID
-	}
-
-	if call.Method != "engine_forkchoiceUpdatedV3" {
-		return false, call.Method, call.ID
 	}
 
 	if len(call.Params) < 2 {
@@ -157,16 +205,12 @@ func (s *Server) parseAuthRpcCall(body []byte) (bool, string, uint64) {
 }
 
 func (s *Server) parseRpcCall(body []byte) (bool, string, uint64) {
-	call := types.EthSendRawTransaction{}
+	call := types.JrpcCall{}
 	if err := json.Unmarshal(body, &call); err != nil {
-		s.logger.Warn("Failed to parse rpc call body",
+		s.logger.Warn("Failed to parse authrpc call body",
 			zap.Error(err),
 		)
 		return false, "", 0
-	}
-
-	if call.Version != "2.0" {
-		return false, call.Method, call.ID
 	}
 
 	if call.Method != "eth_sendRawTransaction" {

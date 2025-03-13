@@ -19,7 +19,7 @@ type Proxy struct {
 var (
 	errProxyFailedToGetLocalIPs  = errors.New("failed to get local ip addresses")
 	errProxyInvalidBackend       = errors.New("invalid backend url")
-	errProxyInvalidListenAddress = errors.New("invalid listen address")
+	errProxyInvalidListenAddress = errors.New("invalid proxy listen address")
 	errProxyInvalidPeer          = errors.New("invalid peer url")
 )
 

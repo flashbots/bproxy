@@ -3,10 +3,15 @@ package proxy
 import (
 	"context"
 	"fmt"
+
 	"sync"
 	"time"
 
+	"github.com/flashbots/bproxy/metrics"
+
 	"github.com/valyala/fasthttp"
+	"go.opentelemetry.io/otel/attribute"
+	otelapi "go.opentelemetry.io/otel/metric"
 	"go.uber.org/zap"
 )
 
@@ -108,20 +113,22 @@ func (p *Proxy) Stop(ctx context.Context) error {
 func (p *Proxy) handle(ctx *fasthttp.RequestCtx) {
 	l := p.logger
 
-	var wg sync.WaitGroup
+	var (
+		wg sync.WaitGroup
+
+		doMirror   bool
+		jrpcMethod string
+		jrpcID     uint64
+	)
 
 	connectionID := ctx.ConnID()
 
+	if ctx.IsPost() {
+		doMirror, jrpcMethod, jrpcID = p.parse(ctx.PostBody())
+	}
+
 	{
 		wg.Add(1)
-
-		l.Info("Proxying request",
-			zap.Uint64("http_connection_id", connectionID),
-			zap.String("http_remote_ip", ctx.RemoteIP().String()),
-			zap.String("http_method", str(ctx.Method())),
-			zap.String("http_path", str(ctx.Path())),
-			zap.String("backend", p.backendURI.String()),
-		)
 
 		req := fasthttp.AcquireRequest()
 		defer fasthttp.ReleaseRequest(req)
@@ -138,63 +145,90 @@ func (p *Proxy) handle(ctx *fasthttp.RequestCtx) {
 		go func() {
 			if err := p.backend.Do(req, res); err == nil {
 				res.CopyTo(&ctx.Response)
-				l.Debug("Done proxying request",
-					zap.Uint64("http_connection_id", connectionID),
+
+				l.Info("Proxied the request",
+					zap.Uint64("http_upstream_connection_id", connectionID),
+					zap.String("http_upstream_ip", ctx.RemoteIP().String()),
+					zap.String("http_downstream_host", str(p.backendURI.Host())),
+					zap.String("http_method", str(ctx.Method())),
+					zap.String("http_path", str(ctx.Path())),
 					zap.Int("http_status", res.StatusCode()),
+					zap.String("jrpc_method", jrpcMethod),
+					zap.Uint64("jrpc_id", jrpcID),
 				)
+
+				metrics.ProxySuccessCount.Add(context.Background(), 1, otelapi.WithAttributes(
+					attribute.KeyValue{Key: "jrpc_method", Value: attribute.StringValue(jrpcMethod)},
+					attribute.KeyValue{Key: "http_status", Value: attribute.IntValue(res.StatusCode())},
+				))
 			} else {
 				ctx.SetStatusCode(fasthttp.StatusBadGateway)
 				fmt.Fprint(ctx, err.Error())
-				l.Error("Proxy backend failed",
-					zap.Uint64("http_connection_id", connectionID),
+
+				l.Error("Failed to proxy the request",
+					zap.Uint64("http_upstream_connection_id", connectionID),
+					zap.String("http_upstream_ip", ctx.RemoteIP().String()),
+					zap.String("http_downstream_host", str(p.backendURI.Host())),
+					zap.String("http_method", str(ctx.Method())),
+					zap.String("http_path", str(ctx.Path())),
+					zap.String("jrpc_method", jrpcMethod),
+					zap.Uint64("jrpc_id", jrpcID),
 					zap.Error(err),
 				)
+
+				metrics.ProxyFailureCount.Add(context.Background(), 1, otelapi.WithAttributes(
+					attribute.KeyValue{Key: "jrpc_method", Value: attribute.StringValue(jrpcMethod)},
+				))
 			}
 
 			wg.Done()
 		}()
 	}
 
-	if ctx.IsPost() {
-		if doMirror, jrpcMethod, jrpcID := p.parse(ctx.PostBody()); doMirror {
-			for _, uri := range p.peerURIs {
-				l.Info("Mirroring request",
-					zap.Uint64("http_connection_id", connectionID),
-					zap.String("http_remote_ip", ctx.RemoteIP().String()),
-					zap.String("http_method", str(ctx.Method())),
-					zap.String("http_path", str(ctx.Path())),
-					zap.String("jrpc_method", jrpcMethod),
-					zap.Uint64("jrpc_jrpc_request_idid", jrpcID),
-					zap.String("backend", uri.String()),
-				)
+	if doMirror {
+		for _, uri := range p.peerURIs {
+			req := fasthttp.AcquireRequest()
+			res := fasthttp.AcquireResponse()
 
-				req := fasthttp.AcquireRequest()
-				res := fasthttp.AcquireResponse()
+			ctx.Request.CopyTo(req)
+			req.SetURI(uri)
+			req.Header.Add("x-forwarded-for", ctx.RemoteIP().String())
+			req.Header.Add("x-forwarded-host", str(ctx.Host()))
+			req.Header.Add("x-forwarded-proto", str(ctx.Request.URI().Scheme()))
 
-				ctx.Request.CopyTo(req)
-				req.SetURI(uri)
-				req.Header.Add("x-forwarded-for", ctx.RemoteIP().String())
-				req.Header.Add("x-forwarded-host", str(ctx.Host()))
-				req.Header.Add("x-forwarded-proto", str(ctx.Request.URI().Scheme()))
+			go func() {
+				// must not hold references to ctx down here
 
-				go func() {
-					// must not hold references to ctx down here
+				if err := p.backend.Do(req, res); err == nil {
+					l.Info("Mirrored the request",
+						zap.Uint64("http_upstream_connection_id", connectionID),
+						zap.String("http_downstream_host", str(uri.Host())),
+						zap.Int("http_status", res.StatusCode()),
+						zap.String("jrpc_method", jrpcMethod),
+						zap.Uint64("jrpc_id", jrpcID),
+					)
 
-					if err := p.backend.Do(req, res); err == nil {
-						l.Debug("Done mirroring request",
-							zap.Uint64("http_connection_id", connectionID),
-							zap.Int("http_status", res.StatusCode()),
-						)
-					} else {
-						l.Warn("Mirroring peer failed",
-							zap.Uint64("http_connection_id", connectionID),
-							zap.Error(err),
-						)
-					}
-					fasthttp.ReleaseRequest(req)
-					fasthttp.ReleaseResponse(res)
-				}()
-			}
+					metrics.MirrorSuccessCount.Add(context.Background(), 1, otelapi.WithAttributes(
+						attribute.KeyValue{Key: "downstream_host", Value: attribute.StringValue(str(uri.Host()))},
+						attribute.KeyValue{Key: "jrpc_method", Value: attribute.StringValue(jrpcMethod)},
+						attribute.KeyValue{Key: "http_status", Value: attribute.IntValue(res.StatusCode())},
+					))
+				} else {
+					l.Error("Failed to mirror the request",
+						zap.Uint64("http_upstream_connection_id", connectionID),
+						zap.String("http_downstream_host", str(uri.Host())),
+						zap.Error(err),
+					)
+
+					metrics.MirrorFailureCount.Add(context.Background(), 1, otelapi.WithAttributes(
+						attribute.KeyValue{Key: "downstream_host", Value: attribute.StringValue(str(uri.Host()))},
+						attribute.KeyValue{Key: "jrpc_method", Value: attribute.StringValue(jrpcMethod)},
+					))
+				}
+
+				fasthttp.ReleaseRequest(req)
+				fasthttp.ReleaseResponse(res)
+			}()
 		}
 	}
 

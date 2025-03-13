@@ -32,7 +32,7 @@ func IPsOverlap(l, r []net.IP) bool {
 	}
 
 	for _, ip := range r {
-		if _, matches := ips[ip.String()]; !matches {
+		if _, matches := ips[ip.String()]; matches {
 			return true
 		}
 	}

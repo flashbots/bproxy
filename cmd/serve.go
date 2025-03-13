@@ -13,6 +13,7 @@ import (
 const (
 	categoryAuthRPC = "authrpc"
 	categoryRPC     = "rpc"
+	categoryMetrics = "metrics"
 )
 
 func CommandServe(cfg *config.Config) *cli.Command {
@@ -51,7 +52,7 @@ func CommandServe(cfg *config.Config) *cli.Command {
 			Destination: &cfg.AuthRpcProxy.RemoveBackendFromPeers,
 			EnvVars:     []string{envPrefix + strings.ToUpper(categoryAuthRPC) + "_REMOVE_BACKEND_FROM_PEERS"},
 			Name:        categoryAuthRPC + "-remove-backend-from-peers",
-			Usage:       "resolve backend from peers",
+			Usage:       "remove backend from peers",
 			Value:       false,
 		},
 	}
@@ -88,14 +89,26 @@ func CommandServe(cfg *config.Config) *cli.Command {
 			Destination: &cfg.RpcProxy.RemoveBackendFromPeers,
 			EnvVars:     []string{envPrefix + strings.ToUpper(categoryRPC) + "_REMOVE_BACKEND_FROM_PEERS"},
 			Name:        categoryRPC + "-remove-backend-from-peers",
-			Usage:       "resolve backend from peers",
+			Usage:       "remove backend from peers",
 			Value:       false,
+		},
+	}
+
+	metricsFlags := []cli.Flag{
+		&cli.StringFlag{
+			Category:    strings.ToUpper(categoryMetrics),
+			Destination: &cfg.Metrics.ListenAddress,
+			EnvVars:     []string{envPrefix + strings.ToUpper(categoryMetrics) + "_LISTEN_ADDRESS"},
+			Name:        categoryMetrics + "-listen-address",
+			Usage:       "`host:port` for metrics server",
+			Value:       "0.0.0.0:6785",
 		},
 	}
 
 	flags := slices.Concat(
 		authrpcFlags,
 		rpcFlags,
+		metricsFlags,
 	)
 
 	return &cli.Command{

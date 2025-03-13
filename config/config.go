@@ -10,6 +10,8 @@ type Config struct {
 
 	AuthRpcProxy *Proxy `yaml:"authrpc_proxy"`
 	RpcProxy     *Proxy `yaml:"rpc_proxy"`
+
+	Metrics *Metrics `yaml:"metrics"`
 }
 
 func New() *Config {
@@ -18,6 +20,8 @@ func New() *Config {
 
 		AuthRpcProxy: &Proxy{},
 		RpcProxy:     &Proxy{},
+
+		Metrics: &Metrics{},
 	}
 }
 
