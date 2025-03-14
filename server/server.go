@@ -17,6 +17,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
 	"github.com/goccy/go-json"
+	otelapi "go.opentelemetry.io/otel/metric"
 	"go.uber.org/zap"
 )
 
@@ -83,26 +84,26 @@ func New(cfg *config.Config) (*Server, error) {
 	return s, nil
 }
 
-func (p *Server) Run() error {
-	l := p.logger
+func (s *Server) Run() error {
+	l := s.logger
 	ctx := logutils.ContextWithLogger(context.Background(), l)
 
-	if err := metrics.Setup(ctx); err != nil {
+	if err := metrics.Setup(ctx, s.observe); err != nil {
 		return err
 	}
 
 	go func() { // run the metrics server
 		l.Info("Metrics server is going up...",
-			zap.String("server_listen_address", p.cfg.Metrics.ListenAddress),
+			zap.String("server_listen_address", s.cfg.Metrics.ListenAddress),
 		)
-		if err := p.metrics.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			p.failure <- err
+		if err := s.metrics.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			s.failure <- err
 		}
 		l.Info("Metrics server is down")
 	}()
 
-	p.authrpc.Run(ctx, p.failure)
-	p.rpc.Run(ctx, p.failure)
+	s.authrpc.Run(ctx, s.failure)
+	s.rpc.Run(ctx, s.failure)
 
 	errs := []error{}
 	{ // wait until termination or internal failure
@@ -114,7 +115,7 @@ func (p *Server) Run() error {
 			l.Info("Stop signal received; shutting down...",
 				zap.String("signal", stop.String()),
 			)
-		case err := <-p.failure:
+		case err := <-s.failure:
 			l.Error("Internal failure; shutting down...",
 				zap.Error(err),
 			)
@@ -122,7 +123,7 @@ func (p *Server) Run() error {
 		exhaustErrors:
 			for { // exhaust the errors
 				select {
-				case err := <-p.failure:
+				case err := <-s.failure:
 					l.Error("Extra internal failure",
 						zap.Error(err),
 					)
@@ -137,7 +138,7 @@ func (p *Server) Run() error {
 	{ // stop the rpc proxy
 		ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 		defer cancel()
-		if err := p.rpc.Stop(ctx); err != nil {
+		if err := s.rpc.Stop(ctx); err != nil {
 			l.Error("Failed to shutdown proxy for rpc",
 				zap.Error(err),
 			)
@@ -147,7 +148,7 @@ func (p *Server) Run() error {
 	{ // stop the authrpc proxy
 		ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 		defer cancel()
-		if err := p.authrpc.Stop(ctx); err != nil {
+		if err := s.authrpc.Stop(ctx); err != nil {
 			l.Error("Failed to shutdown proxy for authrpc",
 				zap.Error(err),
 			)
@@ -157,7 +158,7 @@ func (p *Server) Run() error {
 	{ // stop metrics server
 		ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 		defer cancel()
-		if err := p.metrics.Shutdown(ctx); err != nil {
+		if err := s.metrics.Shutdown(ctx); err != nil {
 			l.Error("Metrics server shutdown failed",
 				zap.Error(err),
 			)
@@ -222,4 +223,25 @@ func (s *Server) parseRpcCall(body []byte) (bool, string, uint64) {
 	}
 
 	return true, call.Method, call.ID
+}
+
+func (s *Server) observe(ctx context.Context, o otelapi.Observer) error {
+	errs := make([]error, 0, 2)
+
+	if err := s.authrpc.Observe(ctx, o); err != nil {
+		errs = append(errs, err)
+	}
+
+	if err := s.rpc.Observe(ctx, o); err != nil {
+		errs = append(errs, err)
+	}
+
+	switch len(errs) {
+	default:
+		return errors.Join(errs...)
+	case 1:
+		return errs[0]
+	case 0:
+		return nil
+	}
 }

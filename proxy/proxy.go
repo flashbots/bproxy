@@ -339,3 +339,10 @@ func (p *Proxy) upstreamConnectionChanged(conn net.Conn, state fasthttp.ConnStat
 		p.logger.Info("Upstream connection was closed", logFields...)
 	}
 }
+
+func (p *Proxy) Observe(ctx context.Context, o otelapi.Observer) error {
+	o.ObserveInt64(metrics.FrontendConnectionsCount, int64(p.frontend.GetOpenConnectionsCount()), otelapi.WithAttributes(
+		attribute.KeyValue{Key: "proxy", Value: attribute.StringValue(p.cfg.Name)},
+	))
+	return nil
+}

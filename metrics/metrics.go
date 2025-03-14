@@ -17,17 +17,28 @@ var (
 	meter otelapi.Meter
 )
 
-func Setup(ctx context.Context) error {
+func Setup(
+	ctx context.Context,
+	observe func(ctx context.Context, o otelapi.Observer) error,
+) error {
 	for _, setup := range []func(context.Context) error{
 		setupMeter, // must come first
 		setupProxySuccessCount,
 		setupProxyFailureCount,
 		setupMirrorSuccessCount,
 		setupMirrorFailureCount,
+		setupFrontendConnectionsCount,
 	} {
 		if err := setup(ctx); err != nil {
 			return err
 		}
+	}
+
+	_, err := meter.RegisterCallback(observe,
+		FrontendConnectionsCount,
+	)
+	if err != nil {
+		return err
 	}
 
 	return nil
@@ -98,5 +109,16 @@ func setupMirrorFailureCount(ctx context.Context) error {
 		return err
 	}
 	MirrorFailureCount = m
+	return nil
+}
+
+func setupFrontendConnectionsCount(ctx context.Context) error {
+	m, err := meter.Int64ObservableGauge("frontend_connections_count",
+		otelapi.WithDescription("count of open frontend connections"),
+	)
+	if err != nil {
+		return err
+	}
+	FrontendConnectionsCount = m
 	return nil
 }
