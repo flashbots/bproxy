@@ -41,6 +41,15 @@ func CommandServe(cfg *config.Config) *cli.Command {
 
 		&cli.BoolFlag{
 			Category:    strings.ToUpper(categoryAuthRPC),
+			Destination: &cfg.AuthRpcProxy.LogRequests,
+			EnvVars:     []string{envPrefix + strings.ToUpper(categoryAuthRPC) + "_LOG_REQUESTS"},
+			Name:        categoryAuthRPC + "-log-requests",
+			Usage:       "whether to log authrpc requests",
+			Value:       false,
+		},
+
+		&cli.BoolFlag{
+			Category:    strings.ToUpper(categoryAuthRPC),
 			Destination: &cfg.AuthRpcProxy.LogResponses,
 			EnvVars:     []string{envPrefix + strings.ToUpper(categoryAuthRPC) + "_LOG_RESPONSES"},
 			Name:        categoryAuthRPC + "-log-responses",
@@ -83,6 +92,15 @@ func CommandServe(cfg *config.Config) *cli.Command {
 			Name:        categoryRPC + "-listen-address",
 			Usage:       "`host:port` for rpc proxy",
 			Value:       "0.0.0.0:8545",
+		},
+
+		&cli.BoolFlag{
+			Category:    strings.ToUpper(categoryRPC),
+			Destination: &cfg.RpcProxy.LogRequests,
+			EnvVars:     []string{envPrefix + strings.ToUpper(categoryRPC) + "_LOG_REQUESTS"},
+			Name:        categoryRPC + "-log-requests",
+			Usage:       "whether to log rpc requests",
+			Value:       false,
 		},
 
 		&cli.BoolFlag{

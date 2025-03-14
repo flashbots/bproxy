@@ -3,10 +3,12 @@ package proxy
 import (
 	"context"
 	"fmt"
+	"net"
 
 	"sync"
 	"time"
 
+	"github.com/flashbots/bproxy/logutils"
 	"github.com/flashbots/bproxy/metrics"
 
 	"github.com/valyala/fasthttp"
@@ -32,6 +34,7 @@ type Proxy struct {
 type Config struct {
 	Name          string
 	ListenAddress string
+	LogRequests   bool
 	LogResponses  bool
 
 	BackendURI string
@@ -41,15 +44,19 @@ type Config struct {
 }
 
 func New(cfg *Config) (*Proxy, error) {
+	l := zap.L().With(zap.String("proxy_name", cfg.Name))
+
 	p := &Proxy{
 		cfg:    cfg,
-		logger: zap.L().With(zap.String("proxy_name", cfg.Name)),
+		logger: l,
 		parse:  cfg.Parse,
 	}
 
 	p.frontend = &fasthttp.Server{
+		ConnState:          p.upstreamConnectionChanged,
 		Handler:            p.handle,
 		IdleTimeout:        30 * time.Second,
+		Logger:             logutils.FasthttpLogger(l),
 		MaxRequestBodySize: 64 * 1024,
 		Name:               cfg.Name,
 		ReadTimeout:        5 * time.Second,
@@ -58,6 +65,7 @@ func New(cfg *Config) (*Proxy, error) {
 
 	p.backend = &fasthttp.Client{
 		MaxIdleConnDuration: 30 * time.Second,
+		Name:                cfg.Name,
 		ReadTimeout:         5 * time.Second,
 		WriteTimeout:        5 * time.Second,
 	}
@@ -123,6 +131,7 @@ func (p *Proxy) handle(ctx *fasthttp.RequestCtx) {
 	)
 
 	connectionID := ctx.ConnID()
+	remoteIP := ctx.RemoteIP().String()
 
 	if ctx.IsPost() {
 		doMirror, jrpcMethod, jrpcID = p.parse(ctx.PostBody())
@@ -146,15 +155,22 @@ func (p *Proxy) handle(ctx *fasthttp.RequestCtx) {
 		go func() {
 			err := p.backend.Do(req, res)
 
-			loggedFields := make([]zap.Field, 0, 8)
+			loggedFields := make([]zap.Field, 0, 12)
 
 			loggedFields = append(loggedFields,
+				zap.Bool("mirror", doMirror),
 				zap.String("jrpc_method", jrpcMethod),
 				zap.Uint64("jrpc_id", jrpcID),
 				zap.Uint64("http_upstream_connection_id", connectionID),
-				zap.String("http_upstream_ip", ctx.RemoteIP().String()),
+				zap.String("http_upstream_ip", remoteIP),
 				zap.String("http_downstream_host", str(p.backendURI.Host())),
 			)
+
+			if p.cfg.LogRequests {
+				loggedFields = append(loggedFields,
+					zap.String("http_request", str(req.Body())),
+				)
+			}
 
 			if err == nil {
 				res.CopyTo(&ctx.Response)
@@ -214,14 +230,21 @@ func (p *Proxy) handle(ctx *fasthttp.RequestCtx) {
 
 				err := p.backend.Do(req, res)
 
-				loggedFields := make([]zap.Field, 0, 8)
+				loggedFields := make([]zap.Field, 0, 12)
 
 				loggedFields = append(loggedFields,
 					zap.String("jrpc_method", jrpcMethod),
 					zap.Uint64("jrpc_id", jrpcID),
 					zap.Uint64("http_upstream_connection_id", connectionID),
+					zap.String("http_upstream_ip", remoteIP),
 					zap.String("http_downstream_host", str(uri.Host())),
 				)
+
+				if p.cfg.LogRequests {
+					loggedFields = append(loggedFields,
+						zap.String("http_request", str(req.Body())),
+					)
+				}
 
 				if err == nil {
 					loggedFields = append(loggedFields,
@@ -267,4 +290,24 @@ func (p *Proxy) handle(ctx *fasthttp.RequestCtx) {
 	wg.Wait()
 
 	_ = l.Sync()
+}
+
+func (p *Proxy) upstreamConnectionChanged(conn net.Conn, state fasthttp.ConnState) {
+	logFields := []zap.Field{
+		zap.String("local_ip", conn.LocalAddr().String()),
+		zap.String("remote_ip", conn.RemoteAddr().String()),
+	}
+
+	switch state {
+	case fasthttp.StateNew:
+		p.logger.Info("New upstream connection established", logFields...)
+	case fasthttp.StateActive:
+		p.logger.Info("Upstream connection became active", logFields...)
+	case fasthttp.StateIdle:
+		p.logger.Info("Upstream connection became idle", logFields...)
+	case fasthttp.StateHijacked:
+		p.logger.Info("Upstream connection was hijacked", logFields...)
+	case fasthttp.StateClosed:
+		p.logger.Info("Upstream connection was closed", logFields...)
+	}
 }
