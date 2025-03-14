@@ -300,11 +300,11 @@ func (p *Proxy) upstreamConnectionChanged(conn net.Conn, state fasthttp.ConnStat
 
 	switch state {
 	case fasthttp.StateNew:
-		p.logger.Info("New upstream connection established", logFields...)
+		p.logger.Info("Upstream connection was established", logFields...)
 	case fasthttp.StateActive:
-		p.logger.Info("Upstream connection became active", logFields...)
+		p.logger.Debug("Upstream connection became active", logFields...)
 	case fasthttp.StateIdle:
-		p.logger.Info("Upstream connection became idle", logFields...)
+		p.logger.Debug("Upstream connection became idle", logFields...)
 	case fasthttp.StateHijacked:
 		p.logger.Info("Upstream connection was hijacked", logFields...)
 	case fasthttp.StateClosed:
