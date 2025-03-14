@@ -105,7 +105,7 @@ func CommandServe(cfg *config.Config) *cli.Command {
 
 		&cli.BoolFlag{
 			Category:    strings.ToUpper(categoryRPC),
-			Destination: &cfg.AuthRpcProxy.LogResponses,
+			Destination: &cfg.RpcProxy.LogResponses,
 			EnvVars:     []string{envPrefix + strings.ToUpper(categoryRPC) + "_LOG_RESPONSES"},
 			Name:        categoryRPC + "-log-responses",
 			Usage:       "whether to log responses to proxied/mirrored rpc requests",

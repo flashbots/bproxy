@@ -2,6 +2,7 @@ package proxy
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net"
 
@@ -167,9 +168,16 @@ func (p *Proxy) handle(ctx *fasthttp.RequestCtx) {
 			)
 
 			if p.cfg.LogRequests {
-				loggedFields = append(loggedFields,
-					zap.String("http_request", str(req.Body())),
-				)
+				var jsonRequest interface{}
+				if err := json.Unmarshal(req.Body(), &jsonRequest); err == nil {
+					loggedFields = append(loggedFields,
+						zap.Any("json_request", jsonRequest),
+					)
+				} else {
+					loggedFields = append(loggedFields,
+						zap.String("http_request", str(req.Body())),
+					)
+				}
 			}
 
 			if err == nil {
@@ -180,9 +188,16 @@ func (p *Proxy) handle(ctx *fasthttp.RequestCtx) {
 				)
 
 				if p.cfg.LogResponses {
-					loggedFields = append(loggedFields,
-						zap.String("http_response", str(res.Body())),
-					)
+					var jsonResponse interface{}
+					if err := json.Unmarshal(res.Body(), &jsonResponse); err == nil {
+						loggedFields = append(loggedFields,
+							zap.Any("json_response", jsonResponse),
+						)
+					} else {
+						loggedFields = append(loggedFields,
+							zap.String("http_response", str(res.Body())),
+						)
+					}
 				}
 
 				l.Info("Proxied the request", loggedFields...)
@@ -241,9 +256,16 @@ func (p *Proxy) handle(ctx *fasthttp.RequestCtx) {
 				)
 
 				if p.cfg.LogRequests {
-					loggedFields = append(loggedFields,
-						zap.String("http_request", str(req.Body())),
-					)
+					var jsonRequest interface{}
+					if err := json.Unmarshal(req.Body(), &jsonRequest); err == nil {
+						loggedFields = append(loggedFields,
+							zap.Any("json_request", jsonRequest),
+						)
+					} else {
+						loggedFields = append(loggedFields,
+							zap.String("http_request", str(req.Body())),
+						)
+					}
 				}
 
 				if err == nil {
@@ -252,9 +274,16 @@ func (p *Proxy) handle(ctx *fasthttp.RequestCtx) {
 					)
 
 					if p.cfg.LogResponses {
-						loggedFields = append(loggedFields,
-							zap.String("http_response", str(res.Body())),
-						)
+						var jsonResponse interface{}
+						if err := json.Unmarshal(res.Body(), &jsonResponse); err == nil {
+							loggedFields = append(loggedFields,
+								zap.Any("json_response", jsonResponse),
+							)
+						} else {
+							loggedFields = append(loggedFields,
+								zap.String("http_response", str(res.Body())),
+							)
+						}
 					}
 
 					l.Info("Mirrored the request", loggedFields...)
