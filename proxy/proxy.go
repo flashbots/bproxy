@@ -2,7 +2,6 @@ package proxy
 
 import (
 	"context"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"net"
@@ -191,6 +190,19 @@ func (p *Proxy) handle(ctx *fasthttp.RequestCtx) {
 					loggedFields = append(loggedFields,
 						zap.Any("json_request", jsonRequest),
 					)
+
+					if call.jrpcMethod == "eth_sendRawTransaction" {
+						txHash, err := decodeTxHash(req.Body())
+						if err == nil {
+							loggedFields = append(loggedFields,
+								zap.String("tx_hash", txHash),
+							)
+						} else {
+							loggedFields = append(loggedFields,
+								zap.NamedError("error_decode_tx_hash", err),
+							)
+						}
+					}
 				} else {
 					loggedFields = append(loggedFields,
 						zap.String("http_request", str(req.Body())),
@@ -199,6 +211,8 @@ func (p *Proxy) handle(ctx *fasthttp.RequestCtx) {
 			}
 
 			if err == nil {
+				res.CopyTo(&ctx.Response)
+
 				loggedFields = append(loggedFields,
 					zap.Int("http_status", res.StatusCode()),
 				)
@@ -218,31 +232,28 @@ func (p *Proxy) handle(ctx *fasthttp.RequestCtx) {
 						}
 
 					case "gzip":
-						fmt.Println("gzip")
-						fmt.Println(res)
-						fmt.Println(res.BodyStream())
-
-						if body, err := unzip(res.BodyStream()); err == nil {
-							var jsonResponse interface{}
-							if err := json.Unmarshal(body, &jsonResponse); err == nil {
-								loggedFields = append(loggedFields,
-									zap.Any("json_response", jsonResponse),
-								)
+						/*
+							if body, err := unzip(res.BodyStream()); err == nil {
+								var jsonResponse interface{}
+								if err := json.Unmarshal(body, &jsonResponse); err == nil {
+									loggedFields = append(loggedFields,
+										zap.Any("json_response", jsonResponse),
+									)
+								} else {
+									loggedFields = append(loggedFields,
+										zap.String("http_response", str(body)),
+									)
+								}
 							} else {
 								loggedFields = append(loggedFields,
-									zap.String("http_response", str(body)),
+									zap.NamedError("error_gzip", err),
+									zap.String("hex_response", hex.EncodeToString(res.Body())),
 								)
 							}
-						} else {
-							loggedFields = append(loggedFields,
-								zap.NamedError("error_gzip", err),
-								zap.String("hex_response", hex.EncodeToString(res.Body())),
-							)
-						}
+						*/
 					}
 				}
 
-				res.CopyTo(&ctx.Response)
 				l.Info("Proxied the request", loggedFields...)
 
 				metrics.ProxySuccessCount.Add(context.Background(), 1, otelapi.WithAttributes(
