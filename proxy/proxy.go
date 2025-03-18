@@ -191,19 +191,6 @@ func (p *Proxy) handle(ctx *fasthttp.RequestCtx) {
 					loggedFields = append(loggedFields,
 						zap.Any("json_request", jsonRequest),
 					)
-
-					if call.jrpcMethod == "eth_sendRawTransaction" {
-						txHash, err := decodeTxHash(req.Body())
-						if err == nil {
-							loggedFields = append(loggedFields,
-								zap.String("tx_hash", txHash),
-							)
-						} else {
-							loggedFields = append(loggedFields,
-								zap.NamedError("error_decode_tx_hash", err),
-							)
-						}
-					}
 				} else {
 					loggedFields = append(loggedFields,
 						zap.String("http_request", str(req.Body())),
@@ -316,14 +303,15 @@ func (p *Proxy) handle(ctx *fasthttp.RequestCtx) {
 						)
 
 						if call.jrpcMethod == "eth_sendRawTransaction" {
-							var input []byte
-							if err := json.Unmarshal(req.Body(), &input); err == nil {
-								panic(err)
-							}
-
-							tx := new(types.Transaction)
-							if err := tx.UnmarshalBinary(input); err == nil {
-								panic(err)
+							txHash, err := decodeTxHash(req.Body())
+							if err == nil {
+								loggedFields = append(loggedFields,
+									zap.String("tx_hash", txHash),
+								)
+							} else {
+								loggedFields = append(loggedFields,
+									zap.NamedError("error_decode_tx_hash", err),
+								)
 							}
 						}
 					} else {
