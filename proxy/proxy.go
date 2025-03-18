@@ -11,6 +11,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/ethereum/go-ethereum/common/hexutil"
+	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/flashbots/bproxy/logutils"
 	"github.com/flashbots/bproxy/metrics"
 
@@ -125,6 +127,13 @@ func (p *Proxy) defaultTriage(body []byte) triagedRequest {
 	return triagedRequest{}
 }
 
+type jsonrpcRequest struct {
+	Version string          `json:"jsonrpc,omitempty"`
+	ID      json.RawMessage `json:"id,omitempty"`
+	Method  string          `json:"method,omitempty"`
+	Params  json.RawMessage `json:"params,omitempty"`
+}
+
 func (p *Proxy) handle(ctx *fasthttp.RequestCtx) {
 	l := p.logger
 
@@ -183,6 +192,19 @@ func (p *Proxy) handle(ctx *fasthttp.RequestCtx) {
 					loggedFields = append(loggedFields,
 						zap.Any("json_request", jsonRequest),
 					)
+
+					if call.jrpcMethod == "eth_sendRawTransaction" {
+						txHash, err := decodeTxHash(req.Body())
+						if err == nil {
+							loggedFields = append(loggedFields,
+								zap.String("tx_hash", txHash),
+							)
+						} else {
+							loggedFields = append(loggedFields,
+								zap.NamedError("error_decode_tx_hash", err),
+							)
+						}
+					}
 				} else {
 					loggedFields = append(loggedFields,
 						zap.String("http_request", str(req.Body())),
@@ -399,4 +421,39 @@ func (p *Proxy) Observe(ctx context.Context, o otelapi.Observer) error {
 		attribute.KeyValue{Key: "proxy", Value: attribute.StringValue(p.cfg.Name)},
 	))
 	return nil
+}
+
+func decodeTxHash(req []byte) (string, error) {
+	var jsonRequest jsonrpcRequest
+	if err := json.Unmarshal(req, &jsonRequest); err != nil {
+		return "", err
+	}
+
+	fmt.Println("params", jsonRequest.Params, string(jsonRequest.Params))
+
+	// this is a bit ugly, but it works
+	var inputs []interface{}
+	if err := json.Unmarshal(jsonRequest.Params, &inputs); err != nil {
+		return "", err
+	}
+	if len(inputs) != 1 {
+		return "", fmt.Errorf("expected 1 input, got %d", len(inputs))
+	}
+	input, ok := inputs[0].(string)
+	if !ok {
+		return "", fmt.Errorf("expected string input, got %T", inputs[0])
+	}
+	inputBytes, err := hexutil.Decode(input)
+	if err != nil {
+		return "", err
+	}
+
+	tx := new(types.Transaction)
+	if err := tx.UnmarshalBinary(inputBytes); err == nil {
+		fmt.Println("=> tx err", err)
+		return "", err
+	}
+	fmt.Println("=> tx", tx)
+	fmt.Println("=> txHash", tx.Hash().Hex())
+	return tx.Hash().Hex(), nil
 }
