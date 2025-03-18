@@ -29,29 +29,20 @@ type Proxy struct {
 
 	logger *zap.Logger
 
-	parse func(body []byte) (bool, string, uint64)
+	triage func(body []byte) triagedRequest
+	run    func()
+	stop   func()
 }
 
-type Config struct {
-	Name          string
-	ListenAddress string
-	LogRequests   bool
-	LogResponses  bool
-
-	BackendURI string
-	PeerURIs   []string
-
-	Parse func(body []byte) (doMirror bool, jrpcMethod string, jrpcID uint64)
-}
-
-func New(cfg *Config) (*Proxy, error) {
+func newProxy(cfg *Config) (*Proxy, error) {
 	l := zap.L().With(zap.String("proxy_name", cfg.Name))
 
 	p := &Proxy{
 		cfg:    cfg,
 		logger: l,
-		parse:  cfg.Parse,
 	}
+
+	p.triage = p.defaultTriage
 
 	p.frontend = &fasthttp.Server{
 		ConnState:          p.upstreamConnectionChanged,
@@ -96,6 +87,10 @@ func New(cfg *Config) (*Proxy, error) {
 func (p *Proxy) Run(ctx context.Context, failure chan<- error) {
 	l := p.logger
 
+	if p.run != nil {
+		p.run()
+	}
+
 	go func() { // run the authrpc proxy
 		l.Info("Proxy is going up...",
 			zap.String("listen_address", p.cfg.ListenAddress),
@@ -117,7 +112,15 @@ func (p *Proxy) Stop(ctx context.Context) error {
 		fasthttp.ReleaseURI(uri)
 	}
 
+	if p.stop != nil {
+		p.stop()
+	}
+
 	return res
+}
+
+func (p *Proxy) defaultTriage(body []byte) triagedRequest {
+	return triagedRequest{}
 }
 
 func (p *Proxy) handle(ctx *fasthttp.RequestCtx) {
@@ -126,42 +129,47 @@ func (p *Proxy) handle(ctx *fasthttp.RequestCtx) {
 	var (
 		wg sync.WaitGroup
 
-		doMirror   bool
-		jrpcMethod string
-		jrpcID     uint64
+		call         = p.triage(ctx.Request.Body())
+		connectionID = ctx.ConnID()
+		remoteAddr   = ctx.RemoteAddr().String()
+
+		req *fasthttp.Request
+		res *fasthttp.Response
 	)
-
-	connectionID := ctx.ConnID()
-	remoteAddr := ctx.RemoteAddr().String()
-
-	if ctx.IsPost() {
-		doMirror, jrpcMethod, jrpcID = p.parse(ctx.PostBody())
-	}
 
 	{
 		wg.Add(1)
 
-		req := fasthttp.AcquireRequest()
+		req = fasthttp.AcquireRequest()
 		defer fasthttp.ReleaseRequest(req)
 
-		res := fasthttp.AcquireResponse()
-		defer fasthttp.ReleaseResponse(res)
+		if call.proxy {
+			res = fasthttp.AcquireResponse()
+			defer fasthttp.ReleaseResponse(res)
 
-		ctx.Request.CopyTo(req)
-		req.SetURI(p.backendURI)
-		req.Header.Add("x-forwarded-for", ctx.RemoteIP().String())
-		req.Header.Add("x-forwarded-host", str(ctx.Host()))
-		req.Header.Add("x-forwarded-proto", str(ctx.Request.URI().Scheme()))
+			ctx.Request.CopyTo(req)
+			req.SetURI(p.backendURI)
+			req.Header.Add("x-forwarded-for", ctx.RemoteIP().String())
+			req.Header.Add("x-forwarded-host", str(ctx.Host()))
+			req.Header.Add("x-forwarded-proto", str(ctx.Request.URI().Scheme()))
+		} else {
+			res = call.response
+			defer fasthttp.ReleaseResponse(res)
+		}
 
 		go func() {
-			err := p.backend.Do(req, res)
+			var err error
+			if call.proxy {
+				err = p.backend.Do(req, res)
+			}
 
 			loggedFields := make([]zap.Field, 0, 12)
 
 			loggedFields = append(loggedFields,
-				zap.Bool("mirror", doMirror),
-				zap.String("jrpc_method", jrpcMethod),
-				zap.Uint64("jrpc_id", jrpcID),
+				zap.Bool("proxy", call.proxy),
+				zap.Bool("mirror", call.mirror),
+				zap.String("jrpc_method", call.jrpcMethod),
+				zap.Uint64("jrpc_id", call.jrpcID),
 				zap.Uint64("connection_id", connectionID),
 				zap.String("remote_addr", remoteAddr),
 				zap.String("downstream_host", str(p.backendURI.Host())),
@@ -204,7 +212,7 @@ func (p *Proxy) handle(ctx *fasthttp.RequestCtx) {
 
 				metrics.ProxySuccessCount.Add(context.Background(), 1, otelapi.WithAttributes(
 					attribute.KeyValue{Key: "proxy", Value: attribute.StringValue(p.cfg.Name)},
-					attribute.KeyValue{Key: "jrpc_method", Value: attribute.StringValue(jrpcMethod)},
+					attribute.KeyValue{Key: "jrpc_method", Value: attribute.StringValue(call.jrpcMethod)},
 					attribute.KeyValue{Key: "http_status", Value: attribute.IntValue(res.StatusCode())},
 				))
 			} else {
@@ -219,7 +227,7 @@ func (p *Proxy) handle(ctx *fasthttp.RequestCtx) {
 
 				metrics.ProxyFailureCount.Add(context.Background(), 1, otelapi.WithAttributes(
 					attribute.KeyValue{Key: "proxy", Value: attribute.StringValue(p.cfg.Name)},
-					attribute.KeyValue{Key: "jrpc_method", Value: attribute.StringValue(jrpcMethod)},
+					attribute.KeyValue{Key: "jrpc_method", Value: attribute.StringValue(call.jrpcMethod)},
 				))
 			}
 
@@ -227,7 +235,7 @@ func (p *Proxy) handle(ctx *fasthttp.RequestCtx) {
 		}()
 	}
 
-	if doMirror {
+	if call.mirror {
 		for _, uri := range p.peerURIs {
 			req := fasthttp.AcquireRequest()
 			res := fasthttp.AcquireResponse()
@@ -248,8 +256,8 @@ func (p *Proxy) handle(ctx *fasthttp.RequestCtx) {
 				loggedFields := make([]zap.Field, 0, 12)
 
 				loggedFields = append(loggedFields,
-					zap.String("jrpc_method", jrpcMethod),
-					zap.Uint64("jrpc_id", jrpcID),
+					zap.String("jrpc_method", call.jrpcMethod),
+					zap.Uint64("jrpc_id", call.jrpcID),
 					zap.Uint64("connection_id", connectionID),
 					zap.String("remote_addr", remoteAddr),
 					zap.String("downstream_host", str(uri.Host())),
@@ -291,7 +299,7 @@ func (p *Proxy) handle(ctx *fasthttp.RequestCtx) {
 					metrics.MirrorSuccessCount.Add(context.Background(), 1, otelapi.WithAttributes(
 						attribute.KeyValue{Key: "proxy", Value: attribute.StringValue(p.cfg.Name)},
 						attribute.KeyValue{Key: "downstream_host", Value: attribute.StringValue(str(uri.Host()))},
-						attribute.KeyValue{Key: "jrpc_method", Value: attribute.StringValue(jrpcMethod)},
+						attribute.KeyValue{Key: "jrpc_method", Value: attribute.StringValue(call.jrpcMethod)},
 						attribute.KeyValue{Key: "http_status", Value: attribute.IntValue(res.StatusCode())},
 					))
 				} else {
@@ -304,7 +312,7 @@ func (p *Proxy) handle(ctx *fasthttp.RequestCtx) {
 					metrics.MirrorFailureCount.Add(context.Background(), 1, otelapi.WithAttributes(
 						attribute.KeyValue{Key: "proxy", Value: attribute.StringValue(p.cfg.Name)},
 						attribute.KeyValue{Key: "downstream_host", Value: attribute.StringValue(str(uri.Host()))},
-						attribute.KeyValue{Key: "jrpc_method", Value: attribute.StringValue(jrpcMethod)},
+						attribute.KeyValue{Key: "jrpc_method", Value: attribute.StringValue(call.jrpcMethod)},
 					))
 				}
 

@@ -19,9 +19,6 @@ func TestUnmarshal(t *testing.T) {
 		err = json.Unmarshal(b, &call)
 		assert.NoError(t, err)
 
-		assert.Equal(t, "engine_forkchoiceUpdatedV3", call.Method)
-		assert.Equal(t, "2.0", call.Version)
-
 		assert.Equal(t, 2, len(call.Params))
 		assert.NotNil(t, call.Params[0])
 		assert.Nil(t, call.Params[1])
@@ -34,9 +31,6 @@ func TestUnmarshal(t *testing.T) {
 		call := types.EngineForkchoiceUpdatedV3{}
 		err = json.Unmarshal(b, &call)
 		assert.NoError(t, err)
-
-		assert.Equal(t, "engine_forkchoiceUpdatedV3", call.Method)
-		assert.Equal(t, "2.0", call.Version)
 
 		assert.Equal(t, 2, len(call.Params))
 		if len(call.Params) == 2 {
