@@ -2,6 +2,7 @@ package proxy
 
 import (
 	"context"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"net"
@@ -196,15 +197,37 @@ func (p *Proxy) handle(ctx *fasthttp.RequestCtx) {
 				)
 
 				if p.cfg.LogResponses {
-					var jsonResponse interface{}
-					if err := json.Unmarshal(res.Body(), &jsonResponse); err == nil {
-						loggedFields = append(loggedFields,
-							zap.Any("json_response", jsonResponse),
-						)
-					} else {
-						loggedFields = append(loggedFields,
-							zap.String("http_response", str(res.Body())),
-						)
+					switch str(res.Header.ContentEncoding()) {
+					default:
+						var jsonResponse interface{}
+						if err := json.Unmarshal(res.Body(), &jsonResponse); err == nil {
+							loggedFields = append(loggedFields,
+								zap.Any("json_response", jsonResponse),
+							)
+						} else {
+							loggedFields = append(loggedFields,
+								zap.String("http_response", str(res.Body())),
+							)
+						}
+
+					case "gzip":
+						if body, err := unzip(res.BodyStream()); err == nil {
+							var jsonResponse interface{}
+							if err := json.Unmarshal(body, &jsonResponse); err == nil {
+								loggedFields = append(loggedFields,
+									zap.Any("json_response", jsonResponse),
+								)
+							} else {
+								loggedFields = append(loggedFields,
+									zap.String("http_response", str(body)),
+								)
+							}
+						} else {
+							loggedFields = append(loggedFields,
+								zap.NamedError("error_gzip", err),
+								zap.String("hex_response", hex.EncodeToString(res.Body())),
+							)
+						}
 					}
 				}
 
