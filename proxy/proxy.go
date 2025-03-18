@@ -429,7 +429,10 @@ func decodeTxHash(req []byte) (string, error) {
 
 	tx := new(types.Transaction)
 	if err := tx.UnmarshalBinary(inputBytes); err == nil {
+		fmt.Println("=> tx err", err)
 		return "", err
 	}
+	fmt.Println("=> tx", tx)
+	fmt.Println("=> txHash", tx.Hash().Hex())
 	return tx.Hash().Hex(), nil
 }
