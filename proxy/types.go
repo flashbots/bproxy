@@ -19,6 +19,7 @@ type triagedRequest struct {
 
 	jrpcMethod string
 	jrpcID     uint64
+	txHash     string
 
 	response *fasthttp.Response
 }

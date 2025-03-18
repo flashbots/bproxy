@@ -47,10 +47,18 @@ func (p *RpcProxy) triage(body []byte) triagedRequest {
 		}
 	}
 
+	txHash, err := decodeTxHash(body)
+	if err != nil {
+		p.Proxy.logger.Warn("Failed to decode eth_sendRawTransaction hash",
+			zap.Error(err),
+		)
+	}
+
 	return triagedRequest{
 		proxy:      true,
 		mirror:     true,
 		jrpcMethod: jrpc.Method,
 		jrpcID:     jrpc.ID,
+		txHash:     txHash,
 	}
 }
