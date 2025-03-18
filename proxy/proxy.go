@@ -293,6 +293,12 @@ func (p *Proxy) handle(ctx *fasthttp.RequestCtx) {
 					zap.String("downstream_host", str(uri.Host())),
 				)
 
+				if call.txHash != "" {
+					loggedFields = append(loggedFields,
+						zap.String("tx_hash", call.txHash),
+					)
+				}
+
 				if p.cfg.LogRequests {
 					var jsonRequest interface{}
 					if err := json.Unmarshal(req.Body(), &jsonRequest); err == nil {
