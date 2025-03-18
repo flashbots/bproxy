@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/flashbots/bproxy/logutils"
 	"github.com/flashbots/bproxy/metrics"
 
@@ -124,6 +125,13 @@ func (p *Proxy) defaultTriage(body []byte) triagedRequest {
 	return triagedRequest{}
 }
 
+type jsonrpcRequest struct {
+	Version string          `json:"jsonrpc,omitempty"`
+	ID      json.RawMessage `json:"id,omitempty"`
+	Method  string          `json:"method,omitempty"`
+	Params  json.RawMessage `json:"params,omitempty"`
+}
+
 func (p *Proxy) handle(ctx *fasthttp.RequestCtx) {
 	l := p.logger
 
@@ -182,6 +190,19 @@ func (p *Proxy) handle(ctx *fasthttp.RequestCtx) {
 					loggedFields = append(loggedFields,
 						zap.Any("json_request", jsonRequest),
 					)
+
+					if call.jrpcMethod == "eth_sendRawTransaction" {
+						txHash, err := decodeTxHash(req.Body())
+						if err == nil {
+							loggedFields = append(loggedFields,
+								zap.String("tx_hash", txHash),
+							)
+						} else {
+							loggedFields = append(loggedFields,
+								zap.NamedError("error_decode_tx_hash", err),
+							)
+						}
+					}
 				} else {
 					loggedFields = append(loggedFields,
 						zap.String("http_request", str(req.Body())),
@@ -292,6 +313,18 @@ func (p *Proxy) handle(ctx *fasthttp.RequestCtx) {
 						loggedFields = append(loggedFields,
 							zap.Any("json_request", jsonRequest),
 						)
+
+						if call.jrpcMethod == "eth_sendRawTransaction" {
+							var input []byte
+							if err := json.Unmarshal(req.Body(), &input); err == nil {
+								panic(err)
+							}
+
+							tx := new(types.Transaction)
+							if err := tx.UnmarshalBinary(input); err == nil {
+								panic(err)
+							}
+						}
 					} else {
 						loggedFields = append(loggedFields,
 							zap.String("http_request", str(req.Body())),
@@ -376,4 +409,22 @@ func (p *Proxy) Observe(ctx context.Context, o otelapi.Observer) error {
 		attribute.KeyValue{Key: "proxy", Value: attribute.StringValue(p.cfg.Name)},
 	))
 	return nil
+}
+
+func decodeTxHash(req []byte) (string, error) {
+	var jsonRequest jsonrpcRequest
+	if err := json.Unmarshal(req, &jsonRequest); err != nil {
+		return "", err
+	}
+
+	var input []byte
+	if err := json.Unmarshal(jsonRequest.Params, []interface{}{&input}); err != nil {
+		return "", err
+	}
+
+	tx := new(types.Transaction)
+	if err := tx.UnmarshalBinary(input); err == nil {
+		return "", err
+	}
+	return tx.Hash().Hex(), nil
 }
