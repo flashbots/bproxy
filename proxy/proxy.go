@@ -199,8 +199,6 @@ func (p *Proxy) handle(ctx *fasthttp.RequestCtx) {
 			}
 
 			if err == nil {
-				res.CopyTo(&ctx.Response)
-
 				loggedFields = append(loggedFields,
 					zap.Int("http_status", res.StatusCode()),
 				)
@@ -244,6 +242,7 @@ func (p *Proxy) handle(ctx *fasthttp.RequestCtx) {
 					}
 				}
 
+				res.CopyTo(&ctx.Response)
 				l.Info("Proxied the request", loggedFields...)
 
 				metrics.ProxySuccessCount.Add(context.Background(), 1, otelapi.WithAttributes(
