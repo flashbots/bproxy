@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/flashbots/bproxy/logutils"
 	"github.com/flashbots/bproxy/metrics"
@@ -417,7 +418,7 @@ func decodeTxHash(req []byte) (string, error) {
 		return "", err
 	}
 
-	var input []byte
+	var input hexutil.Bytes
 	if err := json.Unmarshal(jsonRequest.Params, []interface{}{&input}); err != nil {
 		return "", err
 	}
