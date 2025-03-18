@@ -420,6 +420,8 @@ func decodeTxHash(req []byte) (string, error) {
 		return "", err
 	}
 
+	fmt.Println("params", jsonRequest.Params, string(jsonRequest.Params))
+
 	var input hexutil.Bytes
 	if err := json.Unmarshal(jsonRequest.Params, []interface{}{&input}); err != nil {
 		return "", err
