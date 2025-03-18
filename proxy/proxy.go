@@ -220,6 +220,10 @@ func (p *Proxy) handle(ctx *fasthttp.RequestCtx) {
 						}
 
 					case "gzip":
+						fmt.Println("gzip")
+						fmt.Println(res)
+						fmt.Println(res.BodyStream())
+
 						if body, err := unzip(res.BodyStream()); err == nil {
 							var jsonResponse interface{}
 							if err := json.Unmarshal(body, &jsonResponse); err == nil {
