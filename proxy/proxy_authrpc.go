@@ -14,14 +14,9 @@ import (
 type AuthrpcProxy struct {
 	Proxy *Proxy
 
-	seenHeads       map[string]seenHead
+	seenHeads       map[string]time.Time
 	mxSeenHeads     sync.Mutex
 	tickerSeenHeads time.Ticker
-}
-
-type seenHead struct {
-	safe, finalised string
-	ts              time.Time
 }
 
 func NewAuthrpcProxy(cfg *Config) (*AuthrpcProxy, error) {
@@ -32,7 +27,7 @@ func NewAuthrpcProxy(cfg *Config) (*AuthrpcProxy, error) {
 
 	ap := &AuthrpcProxy{
 		Proxy:           p,
-		seenHeads:       make(map[string]seenHead, 60),
+		seenHeads:       make(map[string]time.Time, 60),
 		tickerSeenHeads: *time.NewTicker(30 * time.Second),
 	}
 	ap.Proxy.triage = ap.triage
@@ -47,9 +42,9 @@ func (p *AuthrpcProxy) run() {
 		for {
 			<-p.tickerSeenHeads.C
 			p.mxSeenHeads.Lock()
-			for head, seen := range p.seenHeads {
-				if time.Since(seen.ts) > 30*time.Second {
-					delete(p.seenHeads, head)
+			for key, ts := range p.seenHeads {
+				if time.Since(ts) > 30*time.Second {
+					delete(p.seenHeads, key)
 				}
 			}
 			p.mxSeenHeads.Unlock()
@@ -160,19 +155,17 @@ func (p *AuthrpcProxy) triage(body []byte) triagedRequest {
 	}
 }
 
-func (p *AuthrpcProxy) alreadySeen(headBlockHash, safeBlockHash, finalizedBlockHash string) bool {
+func (p *AuthrpcProxy) alreadySeen(headBlockHash, safeBlockHash, finalisedBlockHash string) bool {
 	p.mxSeenHeads.Lock()
 	defer p.mxSeenHeads.Unlock()
 
-	if fcu, seen := p.seenHeads[headBlockHash]; seen {
-		return fcu.safe == safeBlockHash && fcu.finalised == finalizedBlockHash
+	key := headBlockHash + "/" + safeBlockHash + "/" + finalisedBlockHash
+
+	if _, seen := p.seenHeads[key]; seen {
+		return true
 	}
 
-	p.seenHeads[headBlockHash] = seenHead{
-		safe:      safeBlockHash,
-		finalised: finalizedBlockHash,
-		ts:        time.Now(),
-	}
+	p.seenHeads[key] = time.Now()
 
 	return false
 }
