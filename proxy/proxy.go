@@ -145,15 +145,16 @@ func (p *Proxy) handle(ctx *fasthttp.RequestCtx) {
 		req = fasthttp.AcquireRequest()
 		defer fasthttp.ReleaseRequest(req)
 
+		ctx.Request.CopyTo(req)
+		req.SetURI(p.backendURI)
+		req.Header.Add("x-forwarded-for", ctx.RemoteIP().String())
+		req.Header.Add("x-forwarded-host", str(ctx.Host()))
+		req.Header.Add("x-forwarded-proto", str(ctx.Request.URI().Scheme()))
+
 		if call.proxy {
 			res = fasthttp.AcquireResponse()
 			defer fasthttp.ReleaseResponse(res)
 
-			ctx.Request.CopyTo(req)
-			req.SetURI(p.backendURI)
-			req.Header.Add("x-forwarded-for", ctx.RemoteIP().String())
-			req.Header.Add("x-forwarded-host", str(ctx.Host()))
-			req.Header.Add("x-forwarded-proto", str(ctx.Request.URI().Scheme()))
 		} else {
 			res = call.response
 			defer fasthttp.ReleaseResponse(res)
@@ -238,7 +239,11 @@ func (p *Proxy) handle(ctx *fasthttp.RequestCtx) {
 					}
 				}
 
-				l.Info("Proxied the request", loggedFields...)
+				if call.proxy {
+					l.Info("Proxied the request", loggedFields...)
+				} else {
+					l.Info("Faked the request", loggedFields...)
+				}
 
 				metrics.ProxySuccessCount.Add(context.Background(), 1, otelapi.WithAttributes(
 					attribute.KeyValue{Key: "proxy", Value: attribute.StringValue(p.cfg.Name)},
