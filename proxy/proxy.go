@@ -241,15 +241,18 @@ func (p *Proxy) handle(ctx *fasthttp.RequestCtx) {
 
 				if call.proxy {
 					l.Info("Proxied the request", loggedFields...)
+					metrics.ProxySuccessCount.Add(context.Background(), 1, otelapi.WithAttributes(
+						attribute.KeyValue{Key: "proxy", Value: attribute.StringValue(p.cfg.Name)},
+						attribute.KeyValue{Key: "jrpc_method", Value: attribute.StringValue(call.jrpcMethod)},
+						attribute.KeyValue{Key: "http_status", Value: attribute.IntValue(res.StatusCode())},
+					))
 				} else {
 					l.Info("Faked the request", loggedFields...)
+					metrics.ProxyFakeCount.Add(context.Background(), 1, otelapi.WithAttributes(
+						attribute.KeyValue{Key: "proxy", Value: attribute.StringValue(p.cfg.Name)},
+						attribute.KeyValue{Key: "jrpc_method", Value: attribute.StringValue(call.jrpcMethod)},
+					))
 				}
-
-				metrics.ProxySuccessCount.Add(context.Background(), 1, otelapi.WithAttributes(
-					attribute.KeyValue{Key: "proxy", Value: attribute.StringValue(p.cfg.Name)},
-					attribute.KeyValue{Key: "jrpc_method", Value: attribute.StringValue(call.jrpcMethod)},
-					attribute.KeyValue{Key: "http_status", Value: attribute.IntValue(res.StatusCode())},
-				))
 			} else {
 				ctx.SetStatusCode(fasthttp.StatusBadGateway)
 				fmt.Fprint(ctx, err.Error())

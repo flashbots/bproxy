@@ -25,6 +25,7 @@ func Setup(
 		setupMeter, // must come first
 		setupProxySuccessCount,
 		setupProxyFailureCount,
+		setupProxyFakeCount,
 		setupMirrorSuccessCount,
 		setupMirrorFailureCount,
 		setupFrontendConnectionsCount,
@@ -87,6 +88,17 @@ func setupProxyFailureCount(ctx context.Context) error {
 		return err
 	}
 	ProxyFailureCount = m
+	return nil
+}
+
+func setupProxyFakeCount(ctx context.Context) error {
+	m, err := meter.Int64Counter("proxy_fake_count",
+		otelapi.WithDescription("count of faked responses to the non-proxied requests"),
+	)
+	if err != nil {
+		return err
+	}
+	ProxyFakeCount = m
 	return nil
 }
 

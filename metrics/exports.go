@@ -7,6 +7,7 @@ import (
 var (
 	ProxySuccessCount otelapi.Int64Counter
 	ProxyFailureCount otelapi.Int64Counter
+	ProxyFakeCount    otelapi.Int64Counter
 
 	MirrorSuccessCount otelapi.Int64Counter
 	MirrorFailureCount otelapi.Int64Counter
