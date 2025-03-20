@@ -34,14 +34,20 @@ type Proxy struct {
 	triage func(body []byte) triagedRequest
 	run    func()
 	stop   func()
+
+	connections         map[string]net.Conn
+	drainingConnections map[string]net.Conn
+	mxConnections       sync.Mutex
 }
 
 func newProxy(cfg *Config) (*Proxy, error) {
 	l := zap.L().With(zap.String("proxy_name", cfg.Name))
 
 	p := &Proxy{
-		cfg:    cfg,
-		logger: l,
+		cfg:                 cfg,
+		logger:              l,
+		connections:         make(map[string]net.Conn),
+		drainingConnections: make(map[string]net.Conn),
 	}
 
 	p.triage = p.defaultTriage
@@ -119,6 +125,21 @@ func (p *Proxy) Stop(ctx context.Context) error {
 	}
 
 	return res
+}
+
+func (p *Proxy) ResetConnections() {
+	p.mxConnections.Lock()
+	defer p.mxConnections.Unlock()
+
+	for addr, conn := range p.connections {
+		if _, alreadyDraining := p.drainingConnections[addr]; alreadyDraining {
+			p.logger.Error("Draining connection address collision",
+				zap.String("remote_addr", addr),
+			)
+		}
+		p.drainingConnections[addr] = conn
+		delete(p.connections, addr)
+	}
 }
 
 func (p *Proxy) defaultTriage(body []byte) triagedRequest {
@@ -392,25 +413,63 @@ func (p *Proxy) handle(ctx *fasthttp.RequestCtx) {
 
 	wg.Wait()
 
+	{ // check if this is a draining connection
+		addr := ctx.RemoteIP().String()
+
+		p.mxConnections.Lock()
+		defer p.mxConnections.Unlock()
+
+		if conn, isDraining := p.drainingConnections[addr]; isDraining {
+			delete(p.drainingConnections, addr)
+			err := conn.Close()
+			l.Info("Drained the upstream connection as finished handling a request",
+				zap.Error(err),
+				zap.Int("remaining", len(p.drainingConnections)),
+			)
+		}
+	}
+
 	_ = l.Sync()
 }
 
 func (p *Proxy) upstreamConnectionChanged(conn net.Conn, state fasthttp.ConnState) {
-	logFields := []zap.Field{
-		zap.String("remote_addr", conn.RemoteAddr().String()),
-	}
+	p.mxConnections.Lock()
+	defer p.mxConnections.Unlock()
+
+	addr := conn.RemoteAddr().String()
+
+	l := p.logger.With(
+		zap.String("remote_addr", addr),
+	)
 
 	switch state {
 	case fasthttp.StateNew:
-		p.logger.Info("Upstream connection was established", logFields...)
+		l.Info("Upstream connection was established")
+		p.connections[addr] = conn
+
 	case fasthttp.StateActive:
-		p.logger.Debug("Upstream connection became active", logFields...)
+		l.Debug("Upstream connection became active")
+
 	case fasthttp.StateIdle:
-		p.logger.Debug("Upstream connection became idle", logFields...)
+		l.Debug("Upstream connection became idle")
+		if _, draining := p.drainingConnections[addr]; draining {
+			delete(p.drainingConnections, addr)
+			err := conn.Close()
+			l.Info("Drained the upstream connection as it became idle",
+				zap.Error(err),
+				zap.Int("remaining", len(p.drainingConnections)),
+			)
+		}
+
 	case fasthttp.StateHijacked:
-		p.logger.Info("Upstream connection was hijacked", logFields...)
+		l.Info("Upstream connection was hijacked")
+		delete(p.connections, addr)
+		delete(p.drainingConnections, addr)
+
 	case fasthttp.StateClosed:
-		p.logger.Info("Upstream connection was closed", logFields...)
+		l.Info("Upstream connection was closed")
+		delete(p.connections, addr)
+		delete(p.drainingConnections, addr)
 	}
 }
 

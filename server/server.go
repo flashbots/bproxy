@@ -107,27 +107,43 @@ func (s *Server) Run() error {
 		terminator := make(chan os.Signal, 1)
 		signal.Notify(terminator, os.Interrupt, syscall.SIGTERM)
 
-		select {
-		case stop := <-terminator:
-			l.Info("Stop signal received; shutting down...",
-				zap.String("signal", stop.String()),
-			)
-		case err := <-s.failure:
-			l.Error("Internal failure; shutting down...",
-				zap.Error(err),
-			)
-			errs = append(errs, err)
-		exhaustErrors:
-			for { // exhaust the errors
-				select {
-				case err := <-s.failure:
-					l.Error("Extra internal failure",
-						zap.Error(err),
-					)
-					errs = append(errs, err)
-				default:
-					break exhaustErrors
+		resetConnections := make(chan os.Signal, 1)
+		signal.Notify(resetConnections, syscall.SIGHUP)
+
+	loop:
+		for {
+			select {
+			case reset := <-resetConnections:
+				l.Info("Reset signal received; draining currently established connections...",
+					zap.String("signal", reset.String()),
+				)
+				s.authrpc.Proxy.ResetConnections()
+				s.rpc.Proxy.ResetConnections()
+
+			case stop := <-terminator:
+				l.Info("Stop signal received; shutting down...",
+					zap.String("signal", stop.String()),
+				)
+				break loop
+
+			case err := <-s.failure:
+				l.Error("Internal failure; shutting down...",
+					zap.Error(err),
+				)
+				errs = append(errs, err)
+			exhaustErrors:
+				for { // exhaust the errors
+					select {
+					case err := <-s.failure:
+						l.Error("Extra internal failure",
+							zap.Error(err),
+						)
+						errs = append(errs, err)
+					default:
+						break exhaustErrors
+					}
 				}
+				break loop
 			}
 		}
 	}
