@@ -11,6 +11,7 @@ import (
 
 type Proxy struct {
 	Backend                string   `yaml:"backend"`
+	Enabled                bool     `yaml:"enabled"`
 	ListenAddress          string   `yaml:"listen_address"`
 	LogRequests            bool     `yaml:"log_requests"`
 	LogResponses           bool     `yaml:"log_responses"`

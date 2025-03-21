@@ -1,6 +1,7 @@
 package proxy
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"sync"
@@ -16,7 +17,7 @@ type AuthrpcProxy struct {
 
 	seenHeads       map[string]time.Time
 	mxSeenHeads     sync.Mutex
-	tickerSeenHeads time.Ticker
+	tickerSeenHeads *time.Ticker
 }
 
 func NewAuthrpcProxy(cfg *Config) (*AuthrpcProxy, error) {
@@ -28,13 +29,34 @@ func NewAuthrpcProxy(cfg *Config) (*AuthrpcProxy, error) {
 	ap := &AuthrpcProxy{
 		Proxy:           p,
 		seenHeads:       make(map[string]time.Time, 60),
-		tickerSeenHeads: *time.NewTicker(30 * time.Second),
+		tickerSeenHeads: time.NewTicker(30 * time.Second),
 	}
 	ap.Proxy.triage = ap.triage
 	ap.Proxy.run = ap.run
 	ap.Proxy.stop = ap.stop
 
 	return ap, nil
+}
+
+func (p *AuthrpcProxy) Run(ctx context.Context, failure chan<- error) {
+	if p == nil {
+		return
+	}
+	p.Proxy.Run(ctx, failure)
+}
+
+func (p *AuthrpcProxy) ResetConnections() {
+	if p == nil {
+		return
+	}
+	p.Proxy.ResetConnections()
+}
+
+func (p *AuthrpcProxy) Stop(ctx context.Context) error {
+	if p == nil {
+		return nil
+	}
+	return p.Proxy.Stop(ctx)
 }
 
 func (p *AuthrpcProxy) run() {

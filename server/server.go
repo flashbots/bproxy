@@ -38,34 +38,37 @@ func New(cfg *config.Config) (*Server, error) {
 		failure: make(chan error, 16),
 	}
 
-	authrpc, err := proxy.NewAuthrpcProxy(&proxy.Config{
-		BackendURI:    cfg.AuthRpcProxy.Backend,
-		Chaos:         s.cfg.Chaos,
-		ListenAddress: cfg.AuthRpcProxy.ListenAddress,
-		LogRequests:   cfg.AuthRpcProxy.LogRequests,
-		LogResponses:  cfg.AuthRpcProxy.LogResponses,
-		Name:          "bproxy-authrpc",
-		PeerURIs:      cfg.AuthRpcProxy.Peers,
-	})
-	if err != nil {
-		return nil, err
+	if cfg.AuthRpcProxy.Enabled {
+		authrpc, err := proxy.NewAuthrpcProxy(&proxy.Config{
+			BackendURI:    cfg.AuthRpcProxy.Backend,
+			Chaos:         s.cfg.Chaos,
+			ListenAddress: cfg.AuthRpcProxy.ListenAddress,
+			LogRequests:   cfg.AuthRpcProxy.LogRequests,
+			LogResponses:  cfg.AuthRpcProxy.LogResponses,
+			Name:          "bproxy-authrpc",
+			PeerURIs:      cfg.AuthRpcProxy.Peers,
+		})
+		if err != nil {
+			return nil, err
+		}
+		s.authrpc = authrpc
 	}
 
-	rpc, err := proxy.NewRpcProxy(&proxy.Config{
-		BackendURI:    cfg.RpcProxy.Backend,
-		Chaos:         s.cfg.Chaos,
-		ListenAddress: cfg.RpcProxy.ListenAddress,
-		LogRequests:   cfg.RpcProxy.LogRequests,
-		LogResponses:  cfg.RpcProxy.LogResponses,
-		Name:          "bproxy-rpc",
-		PeerURIs:      cfg.RpcProxy.Peers,
-	})
-	if err != nil {
-		return nil, err
+	if cfg.RpcProxy.Enabled {
+		rpc, err := proxy.NewRpcProxy(&proxy.Config{
+			BackendURI:    cfg.RpcProxy.Backend,
+			Chaos:         s.cfg.Chaos,
+			ListenAddress: cfg.RpcProxy.ListenAddress,
+			LogRequests:   cfg.RpcProxy.LogRequests,
+			LogResponses:  cfg.RpcProxy.LogResponses,
+			Name:          "bproxy-rpc",
+			PeerURIs:      cfg.RpcProxy.Peers,
+		})
+		if err != nil {
+			return nil, err
+		}
+		s.rpc = rpc
 	}
-
-	s.authrpc = authrpc
-	s.rpc = rpc
 
 	mux := http.NewServeMux()
 	mux.Handle("/", promhttp.Handler())
@@ -101,8 +104,8 @@ func (s *Server) Run() error {
 		l.Info("Metrics server is down")
 	}()
 
-	s.authrpc.Proxy.Run(ctx, s.failure)
-	s.rpc.Proxy.Run(ctx, s.failure)
+	s.authrpc.Run(ctx, s.failure)
+	s.rpc.Run(ctx, s.failure)
 
 	errs := []error{}
 	{ // wait until termination or internal failure
@@ -119,8 +122,8 @@ func (s *Server) Run() error {
 				l.Info("Reset signal received; draining currently established connections...",
 					zap.String("signal", reset.String()),
 				)
-				s.authrpc.Proxy.ResetConnections()
-				s.rpc.Proxy.ResetConnections()
+				s.authrpc.ResetConnections()
+				s.rpc.ResetConnections()
 
 			case stop := <-terminator:
 				l.Info("Stop signal received; shutting down...",
@@ -153,7 +156,7 @@ func (s *Server) Run() error {
 	{ // stop the rpc proxy
 		ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 		defer cancel()
-		if err := s.rpc.Proxy.Stop(ctx); err != nil {
+		if err := s.rpc.Stop(ctx); err != nil {
 			l.Error("Failed to shutdown proxy for rpc",
 				zap.Error(err),
 			)
@@ -163,7 +166,7 @@ func (s *Server) Run() error {
 	{ // stop the authrpc proxy
 		ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 		defer cancel()
-		if err := s.authrpc.Proxy.Stop(ctx); err != nil {
+		if err := s.authrpc.Stop(ctx); err != nil {
 			l.Error("Failed to shutdown proxy for authrpc",
 				zap.Error(err),
 			)

@@ -1,6 +1,7 @@
 package proxy
 
 import (
+	"context"
 	"encoding/json"
 
 	"github.com/flashbots/bproxy/types"
@@ -24,6 +25,27 @@ func NewRpcProxy(cfg *Config) (*RpcProxy, error) {
 	rpcProxy.Proxy.triage = rpcProxy.triage
 
 	return rpcProxy, nil
+}
+
+func (p *RpcProxy) Run(ctx context.Context, failure chan<- error) {
+	if p == nil {
+		return
+	}
+	p.Proxy.Run(ctx, failure)
+}
+
+func (p *RpcProxy) ResetConnections() {
+	if p == nil {
+		return
+	}
+	p.Proxy.ResetConnections()
+}
+
+func (p *RpcProxy) Stop(ctx context.Context) error {
+	if p == nil {
+		return nil
+	}
+	return p.Proxy.Stop(ctx)
 }
 
 func (p *RpcProxy) triage(body []byte) triagedRequest {

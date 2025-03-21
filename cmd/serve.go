@@ -78,6 +78,15 @@ func CommandServe(cfg *config.Config) *cli.Command {
 			Value:       "http://127.0.0.1:18551",
 		},
 
+		&cli.BoolFlag{
+			Category:    strings.ToUpper(categoryAuthRPC),
+			Destination: &cfg.AuthRpcProxy.Enabled,
+			EnvVars:     []string{envPrefix + strings.ToUpper(categoryAuthRPC) + "_ENABLED"},
+			Name:        categoryAuthRPC + "-enabled",
+			Usage:       "enable authrpc proxy",
+			Value:       false,
+		},
+
 		&cli.StringFlag{
 			Category:    strings.ToUpper(categoryAuthRPC),
 			Destination: &cfg.AuthRpcProxy.ListenAddress,
@@ -131,6 +140,15 @@ func CommandServe(cfg *config.Config) *cli.Command {
 			Name:        categoryRPC + "-backend",
 			Usage:       "`url` of backend rpc",
 			Value:       "http://127.0.0.1:18545",
+		},
+
+		&cli.BoolFlag{
+			Category:    strings.ToUpper(categoryRPC),
+			Destination: &cfg.RpcProxy.Enabled,
+			EnvVars:     []string{envPrefix + strings.ToUpper(categoryRPC) + "_ENABLED"},
+			Name:        categoryRPC + "-enabled",
+			Usage:       "enable rpc proxy",
+			Value:       false,
 		},
 
 		&cli.StringFlag{

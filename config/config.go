@@ -27,7 +27,15 @@ func New() *Config {
 	}
 }
 
+var (
+	errConfigNoEnabledProxy = errors.New("neither authrpc nor rpc proxy are enabled, shutting down...")
+)
+
 func (c *Config) Validate() error {
+	if !c.AuthRpcProxy.Enabled && !c.RpcProxy.Enabled {
+		return errConfigNoEnabledProxy
+	}
+
 	return validate(c)
 }
 

@@ -94,6 +94,10 @@ func newProxy(cfg *Config) (*Proxy, error) {
 }
 
 func (p *Proxy) Run(ctx context.Context, failure chan<- error) {
+	if p == nil {
+		return
+	}
+
 	l := p.logger
 
 	if p.run != nil {
@@ -114,6 +118,14 @@ func (p *Proxy) Run(ctx context.Context, failure chan<- error) {
 }
 
 func (p *Proxy) Stop(ctx context.Context) error {
+	if p == nil {
+		return nil
+	}
+
+	if p.stop != nil {
+		p.stop()
+	}
+
 	res := p.frontend.ShutdownWithContext(ctx)
 
 	fasthttp.ReleaseURI(p.backendURI)
@@ -121,14 +133,14 @@ func (p *Proxy) Stop(ctx context.Context) error {
 		fasthttp.ReleaseURI(uri)
 	}
 
-	if p.stop != nil {
-		p.stop()
-	}
-
 	return res
 }
 
 func (p *Proxy) ResetConnections() {
+	if p == nil {
+		return
+	}
+
 	p.mxConnections.Lock()
 	defer p.mxConnections.Unlock()
 
