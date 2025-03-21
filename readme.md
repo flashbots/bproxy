@@ -19,6 +19,14 @@ OPTIONS:
    --authrpc-peers urls [ --authrpc-peers urls ]  list of urls with authrpc peers to mirror the requests to [$BPROXY_AUTHRPC_PEERS]
    --authrpc-remove-backend-from-peers            remove backend from peers (default: false) [$BPROXY_AUTHRPC_REMOVE_BACKEND_FROM_PEERS]
 
+   CHAOS
+
+   --chaos-enabled                                  whether bproxy should be injecting artificial error conditions (default: false) [$BPROXY_CHAOS_ENABLED]
+   --chaos-injected-http-error-probability percent  probability in percent at which to randomly inject http errors into proxied responses (default: 20) [$BPROXY_CHAOS_INJECTED_HTTP_ERROR_PROBABILITY]
+   --chaos-injected-jrpc-error-probability percent  probability in percent at which to randomly inject jrpc errors into proxied responses (default: 20) [$BPROXY_CHAOS_INJECTED_JRPC_ERROR_PROBABILITY]
+   --chaos-max-injected-latency latency             max latency to randomly add to every proxied response (default: 500ms) [$BPROXY_CHAOS_MAX_INJECTED_LATENCY]
+   --chaos-min-injected-latency latency             min latency to randomly add to every proxied response (default: 50ms) [$BPROXY_CHAOS_MIN_INJECTED_LATENCY]
+
    METRICS
 
    --metrics-listen-address host:port  host:port for metrics server (default: "0.0.0.0:6785") [$BPROXY_METRICS_LISTEN_ADDRESS]

@@ -40,6 +40,7 @@ func New(cfg *config.Config) (*Server, error) {
 
 	authrpc, err := proxy.NewAuthrpcProxy(&proxy.Config{
 		BackendURI:    cfg.AuthRpcProxy.Backend,
+		Chaos:         s.cfg.Chaos,
 		ListenAddress: cfg.AuthRpcProxy.ListenAddress,
 		LogRequests:   cfg.AuthRpcProxy.LogRequests,
 		LogResponses:  cfg.AuthRpcProxy.LogResponses,
@@ -52,6 +53,7 @@ func New(cfg *config.Config) (*Server, error) {
 
 	rpc, err := proxy.NewRpcProxy(&proxy.Config{
 		BackendURI:    cfg.RpcProxy.Backend,
+		Chaos:         s.cfg.Chaos,
 		ListenAddress: cfg.RpcProxy.ListenAddress,
 		LogRequests:   cfg.RpcProxy.LogRequests,
 		LogResponses:  cfg.RpcProxy.LogResponses,

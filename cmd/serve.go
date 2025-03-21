@@ -3,6 +3,7 @@ package main
 import (
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/urfave/cli/v2"
 
@@ -11,6 +12,7 @@ import (
 )
 
 const (
+	categoryChaos   = "chaos"
 	categoryAuthRPC = "authrpc"
 	categoryRPC     = "rpc"
 	categoryMetrics = "metrics"
@@ -19,6 +21,52 @@ const (
 func CommandServe(cfg *config.Config) *cli.Command {
 	peersAuthRPC := &cli.StringSlice{}
 	peersRPC := &cli.StringSlice{}
+
+	chaosFlags := []cli.Flag{
+		&cli.BoolFlag{
+			Category:    strings.ToUpper(categoryChaos),
+			Destination: &cfg.Chaos.Enabled,
+			EnvVars:     []string{envPrefix + strings.ToUpper(categoryChaos) + "_ENABLED"},
+			Name:        categoryChaos + "-enabled",
+			Usage:       "whether bproxy should be injecting artificial error conditions",
+			Value:       false,
+		},
+
+		&cli.Float64Flag{
+			Category:    strings.ToUpper(categoryChaos),
+			Destination: &cfg.Chaos.InjectedHttpErrorProbability,
+			EnvVars:     []string{envPrefix + strings.ToUpper(categoryChaos) + "_INJECTED_HTTP_ERROR_PROBABILITY"},
+			Name:        categoryChaos + "-injected-http-error-probability",
+			Usage:       "probability in `percent` at which to randomly inject http errors into proxied responses",
+			Value:       20,
+		},
+
+		&cli.Float64Flag{
+			Category:    strings.ToUpper(categoryChaos),
+			Destination: &cfg.Chaos.InjectedJrpcErrorProbability,
+			EnvVars:     []string{envPrefix + strings.ToUpper(categoryChaos) + "_INJECTED_JRPC_ERROR_PROBABILITY"},
+			Name:        categoryChaos + "-injected-jrpc-error-probability",
+			Usage:       "probability in `percent` at which to randomly inject jrpc errors into proxied responses",
+			Value:       20,
+		},
+
+		&cli.DurationFlag{
+			Category:    strings.ToUpper(categoryChaos),
+			Destination: &cfg.Chaos.MinInjectedLatency,
+			EnvVars:     []string{envPrefix + strings.ToUpper(categoryChaos) + "_MIN_INJECTED_LATENCY"},
+			Name:        categoryChaos + "-min-injected-latency",
+			Usage:       "min `latency` to enforce on every proxied response",
+			Value:       50 * time.Millisecond,
+		},
+
+		&cli.DurationFlag{
+			Category:    strings.ToUpper(categoryChaos),
+			Destination: &cfg.Chaos.MaxInjectedLatency,
+			EnvVars:     []string{envPrefix + strings.ToUpper(categoryChaos) + "_MAX_INJECTED_LATENCY"},
+			Name:        categoryChaos + "-max-injected-latency",
+			Usage:       "max `latency` to randomly enforce on every proxied response",
+		},
+	}
 
 	authrpcFlags := []cli.Flag{
 		&cli.StringFlag{
@@ -142,6 +190,7 @@ func CommandServe(cfg *config.Config) *cli.Command {
 	}
 
 	flags := slices.Concat(
+		chaosFlags,
 		authrpcFlags,
 		rpcFlags,
 		metricsFlags,

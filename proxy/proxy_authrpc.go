@@ -133,6 +133,7 @@ func (p *AuthrpcProxy) triage(body []byte) triagedRequest {
 			)
 
 			res := fasthttp.AcquireResponse()
+			res.SetStatusCode(fasthttp.StatusOK)
 			res.Header.Add("content-type", "application/json; charset=utf-8")
 			res.SetBody([]byte(fmt.Sprintf(
 				`{"jsonrpc":"2.0","id":%d,"result":{"payloadStatus":{"status":"VALID","latestValidHash":"%s"}}}`,

@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"math/rand/v2"
 	"net"
 
 	"sync"
@@ -147,22 +148,21 @@ func (p *Proxy) defaultTriage(body []byte) triagedRequest {
 }
 
 func (p *Proxy) handle(ctx *fasthttp.RequestCtx) {
-	l := p.logger
-
 	var (
-		wg sync.WaitGroup
+		start = time.Now()
 
-		call         = p.triage(ctx.Request.Body())
-		connectionID = ctx.ConnID()
-		remoteAddr   = ctx.RemoteAddr().String()
+		l  *zap.Logger
+		wg sync.WaitGroup
 
 		req *fasthttp.Request
 		res *fasthttp.Response
+
+		proxy func(req *fasthttp.Request, res *fasthttp.Response) error
 	)
 
-	{
-		wg.Add(1)
+	call := p.triage(ctx.Request.Body())
 
+	{ // setup
 		req = fasthttp.AcquireRequest()
 		defer fasthttp.ReleaseRequest(req)
 
@@ -172,38 +172,71 @@ func (p *Proxy) handle(ctx *fasthttp.RequestCtx) {
 		req.Header.Add("x-forwarded-host", str(ctx.Host()))
 		req.Header.Add("x-forwarded-proto", str(ctx.Request.URI().Scheme()))
 
-		if call.proxy {
+		loggedFields := make([]zap.Field, 0, 12)
+
+		switch {
+		case p.cfg.Chaos.Enabled && rand.Float64() < p.cfg.Chaos.InjectedHttpErrorProbability/100:
+			proxy = p.injectHttpError
 			res = fasthttp.AcquireResponse()
-			defer fasthttp.ReleaseResponse(res)
-
-		} else {
-			res = call.response
-			defer fasthttp.ReleaseResponse(res)
-		}
-
-		go func() {
-			var err error
-			if call.proxy {
-				err = p.backend.Do(req, res)
-			}
-
-			loggedFields := make([]zap.Field, 0, 12)
-
+			call.proxy = false
+			call.mirror = false
 			loggedFields = append(loggedFields,
-				zap.Bool("proxy", call.proxy),
-				zap.Bool("mirror", call.mirror),
-				zap.String("jrpc_method", call.jrpcMethod),
-				zap.Uint64("jrpc_id", call.jrpcID),
-				zap.Uint64("connection_id", connectionID),
-				zap.String("remote_addr", remoteAddr),
-				zap.String("downstream_host", str(p.backendURI.Host())),
+				zap.Bool("chaos_http_error", true),
 			)
 
-			if call.txHash != "" {
-				loggedFields = append(loggedFields,
-					zap.String("tx_hash", call.txHash),
-				)
-			}
+		case p.cfg.Chaos.Enabled && rand.Float64() < p.cfg.Chaos.InjectedJrpcErrorProbability/100:
+			proxy = p.injectJrpcError(call.jrpcID, req, res)
+			res = fasthttp.AcquireResponse()
+			call.proxy = false
+			call.mirror = false
+			loggedFields = append(loggedFields,
+				zap.Bool("chaos_jrpc_error", true),
+			)
+
+		case call.proxy:
+			proxy = p.backend.Do
+			res = fasthttp.AcquireResponse()
+
+		default:
+			proxy = func(_ *fasthttp.Request, _ *fasthttp.Response) error { return nil }
+			res = call.response
+			call.mirror = false // request won't be proxied, shouldn't mirror either
+		}
+		defer fasthttp.ReleaseResponse(res)
+
+		loggedFields = append(loggedFields,
+			zap.Bool("proxy", call.proxy),
+			zap.Bool("mirror", call.mirror),
+			zap.Uint64("connection_id", ctx.ConnID()),
+			zap.String("remote_addr", ctx.RemoteAddr().String()),
+			zap.String("jrpc_method", call.jrpcMethod),
+			zap.Uint64("jrpc_id", call.jrpcID),
+		)
+
+		if call.txHash != "" {
+			loggedFields = append(loggedFields,
+				zap.String("tx_hash", call.txHash),
+			)
+		}
+
+		l = p.logger.With(loggedFields...)
+	}
+
+	wg.Add(1)
+
+	go func() {
+		defer wg.Done()
+
+		var (
+			loggedFields = make([]zap.Field, 0, 12)
+		)
+
+		err := proxy(req, res)
+
+		{ // add log fields
+			loggedFields = append(loggedFields,
+				zap.String("downstream_host", str(p.backendURI.Host())),
+			)
 
 			if p.cfg.LogRequests {
 				var jsonRequest interface{}
@@ -217,82 +250,87 @@ func (p *Proxy) handle(ctx *fasthttp.RequestCtx) {
 					)
 				}
 			}
+		}
 
-			if err == nil {
-				res.CopyTo(&ctx.Response)
+		metricAttributes := otelapi.WithAttributes(
+			attribute.KeyValue{Key: "proxy", Value: attribute.StringValue(p.cfg.Name)},
+			attribute.KeyValue{Key: "jrpc_method", Value: attribute.StringValue(call.jrpcMethod)},
+		)
 
-				loggedFields = append(loggedFields,
-					zap.Int("http_status", res.StatusCode()),
-				)
+		if err != nil {
+			ctx.SetStatusCode(fasthttp.StatusBadGateway)
+			fmt.Fprint(ctx, err.Error())
 
-				if p.cfg.LogResponses {
-					switch str(res.Header.ContentEncoding()) {
-					default:
+			loggedFields = append(loggedFields,
+				zap.Error(err),
+			)
+
+			l.Error("Failed to proxy the request", loggedFields...)
+			metrics.ProxyFailureCount.Add(context.Background(), 1, metricAttributes)
+
+			return
+		}
+
+		if p.cfg.Chaos.Enabled { // chaos-inject latency
+			latency := time.Duration(rand.Int64N(int64(p.cfg.Chaos.MaxInjectedLatency) + 1))
+			latency = max(latency, p.cfg.Chaos.MinInjectedLatency)
+			time.Sleep(latency - time.Since(start))
+			loggedFields = append(loggedFields,
+				zap.Bool("chaos_latency", true),
+			)
+		}
+		res.CopyTo(&ctx.Response)
+
+		{ // add log fields
+			loggedFields = append(loggedFields,
+				zap.Duration("http_latency", time.Since(start)),
+				zap.Int("http_status", res.StatusCode()),
+			)
+
+			if p.cfg.LogResponses {
+				switch str(res.Header.ContentEncoding()) {
+				default:
+					var jsonResponse interface{}
+					if err := json.Unmarshal(res.Body(), &jsonResponse); err == nil {
+						loggedFields = append(loggedFields,
+							zap.Any("json_response", jsonResponse),
+						)
+					} else {
+						loggedFields = append(loggedFields,
+							zap.String("http_response", str(res.Body())),
+						)
+					}
+
+				case "gzip":
+					if body, err := unzip(bytes.NewBuffer(res.Body())); err == nil {
 						var jsonResponse interface{}
-						if err := json.Unmarshal(res.Body(), &jsonResponse); err == nil {
+						if err := json.Unmarshal(body, &jsonResponse); err == nil {
 							loggedFields = append(loggedFields,
 								zap.Any("json_response", jsonResponse),
 							)
 						} else {
 							loggedFields = append(loggedFields,
-								zap.String("http_response", str(res.Body())),
+								zap.String("http_response", str(body)),
 							)
 						}
-
-					case "gzip":
-						if body, err := unzip(bytes.NewBuffer(res.Body())); err == nil {
-							var jsonResponse interface{}
-							if err := json.Unmarshal(body, &jsonResponse); err == nil {
-								loggedFields = append(loggedFields,
-									zap.Any("json_response", jsonResponse),
-								)
-							} else {
-								loggedFields = append(loggedFields,
-									zap.String("http_response", str(body)),
-								)
-							}
-						} else {
-							loggedFields = append(loggedFields,
-								zap.NamedError("error_gzip", err),
-								zap.String("hex_response", hex.EncodeToString(res.Body())),
-							)
-						}
+					} else {
+						loggedFields = append(loggedFields,
+							zap.NamedError("error_gzip", err),
+							zap.String("hex_response", hex.EncodeToString(res.Body())),
+						)
 					}
 				}
-
-				if call.proxy {
-					l.Info("Proxied the request", loggedFields...)
-					metrics.ProxySuccessCount.Add(context.Background(), 1, otelapi.WithAttributes(
-						attribute.KeyValue{Key: "proxy", Value: attribute.StringValue(p.cfg.Name)},
-						attribute.KeyValue{Key: "jrpc_method", Value: attribute.StringValue(call.jrpcMethod)},
-						attribute.KeyValue{Key: "http_status", Value: attribute.IntValue(res.StatusCode())},
-					))
-				} else {
-					l.Info("Faked the request", loggedFields...)
-					metrics.ProxyFakeCount.Add(context.Background(), 1, otelapi.WithAttributes(
-						attribute.KeyValue{Key: "proxy", Value: attribute.StringValue(p.cfg.Name)},
-						attribute.KeyValue{Key: "jrpc_method", Value: attribute.StringValue(call.jrpcMethod)},
-					))
-				}
-			} else {
-				ctx.SetStatusCode(fasthttp.StatusBadGateway)
-				fmt.Fprint(ctx, err.Error())
-
-				loggedFields = append(loggedFields,
-					zap.Error(err),
-				)
-
-				l.Error("Failed to proxy the request", loggedFields...)
-
-				metrics.ProxyFailureCount.Add(context.Background(), 1, otelapi.WithAttributes(
-					attribute.KeyValue{Key: "proxy", Value: attribute.StringValue(p.cfg.Name)},
-					attribute.KeyValue{Key: "jrpc_method", Value: attribute.StringValue(call.jrpcMethod)},
-				))
 			}
+		}
 
-			wg.Done()
-		}()
-	}
+		if call.proxy {
+			l.Info("Proxied the request", loggedFields...)
+			metrics.ProxySuccessCount.Add(context.Background(), 1, metricAttributes)
+		} else {
+			l.Info("Faked the request", loggedFields...)
+			metrics.ProxyFakeCount.Add(context.Background(), 1, metricAttributes)
+		}
+	}()
 
 	if call.mirror {
 		for _, uri := range p.peerURIs {
@@ -306,101 +344,90 @@ func (p *Proxy) handle(ctx *fasthttp.RequestCtx) {
 			req.Header.Add("x-forwarded-proto", str(ctx.Request.URI().Scheme()))
 
 			go func() {
+				var loggedFields = make([]zap.Field, 0, 12)
+
 				//
 				// NOTE: must _not_ use (or hold references to) `ctx` down here
 				//
 
 				err := p.backend.Do(req, res)
 
-				loggedFields := make([]zap.Field, 0, 12)
-
-				loggedFields = append(loggedFields,
-					zap.String("jrpc_method", call.jrpcMethod),
-					zap.Uint64("jrpc_id", call.jrpcID),
-					zap.Uint64("connection_id", connectionID),
-					zap.String("remote_addr", remoteAddr),
-					zap.String("downstream_host", str(uri.Host())),
-				)
-
-				if call.txHash != "" {
+				{ // add log fields
 					loggedFields = append(loggedFields,
-						zap.String("tx_hash", call.txHash),
+						zap.String("downstream_host", str(uri.Host())),
 					)
-				}
 
-				if p.cfg.LogRequests {
-					var jsonRequest interface{}
-					if err := json.Unmarshal(req.Body(), &jsonRequest); err == nil {
-						loggedFields = append(loggedFields,
-							zap.Any("json_request", jsonRequest),
-						)
-					} else {
-						loggedFields = append(loggedFields,
-							zap.String("http_request", str(req.Body())),
-						)
+					if p.cfg.LogRequests {
+						var jsonRequest interface{}
+						if err := json.Unmarshal(req.Body(), &jsonRequest); err == nil {
+							loggedFields = append(loggedFields,
+								zap.Any("json_request", jsonRequest),
+							)
+						} else {
+							loggedFields = append(loggedFields,
+								zap.String("http_request", str(req.Body())),
+							)
+						}
 					}
 				}
 
+				metricAttributes := otelapi.WithAttributes(
+					attribute.KeyValue{Key: "proxy", Value: attribute.StringValue(p.cfg.Name)},
+					attribute.KeyValue{Key: "downstream_host", Value: attribute.StringValue(str(uri.Host()))},
+					attribute.KeyValue{Key: "jrpc_method", Value: attribute.StringValue(call.jrpcMethod)},
+				)
+
 				if err == nil {
-					loggedFields = append(loggedFields,
-						zap.Int("http_status", res.StatusCode()),
-					)
+					{ // add log fields
+						loggedFields = append(loggedFields,
+							zap.Int("http_status", res.StatusCode()),
+						)
 
-					if p.cfg.LogResponses {
-						switch str(res.Header.ContentEncoding()) {
-						default:
-							var jsonResponse interface{}
-							if err := json.Unmarshal(res.Body(), &jsonResponse); err == nil {
-								loggedFields = append(loggedFields,
-									zap.Any("json_response", jsonResponse),
-								)
-							} else {
-								loggedFields = append(loggedFields,
-									zap.String("http_response", str(res.Body())),
-								)
-							}
-
-						case "gzip":
-							if body, err := unzip(bytes.NewBuffer(res.Body())); err == nil {
+						if p.cfg.LogResponses {
+							switch str(res.Header.ContentEncoding()) {
+							default:
 								var jsonResponse interface{}
-								if err := json.Unmarshal(body, &jsonResponse); err == nil {
+								if err := json.Unmarshal(res.Body(), &jsonResponse); err == nil {
 									loggedFields = append(loggedFields,
 										zap.Any("json_response", jsonResponse),
 									)
 								} else {
 									loggedFields = append(loggedFields,
-										zap.String("http_response", str(body)),
+										zap.String("http_response", str(res.Body())),
 									)
 								}
-							} else {
-								loggedFields = append(loggedFields,
-									zap.NamedError("error_gzip", err),
-									zap.String("hex_response", hex.EncodeToString(res.Body())),
-								)
+
+							case "gzip":
+								if body, err := unzip(bytes.NewBuffer(res.Body())); err == nil {
+									var jsonResponse interface{}
+									if err := json.Unmarshal(body, &jsonResponse); err == nil {
+										loggedFields = append(loggedFields,
+											zap.Any("json_response", jsonResponse),
+										)
+									} else {
+										loggedFields = append(loggedFields,
+											zap.String("http_response", str(body)),
+										)
+									}
+								} else {
+									loggedFields = append(loggedFields,
+										zap.NamedError("error_gzip", err),
+										zap.String("hex_response", hex.EncodeToString(res.Body())),
+									)
+								}
 							}
 						}
 					}
 
 					l.Info("Mirrored the request", loggedFields...)
-
-					metrics.MirrorSuccessCount.Add(context.Background(), 1, otelapi.WithAttributes(
-						attribute.KeyValue{Key: "proxy", Value: attribute.StringValue(p.cfg.Name)},
-						attribute.KeyValue{Key: "downstream_host", Value: attribute.StringValue(str(uri.Host()))},
-						attribute.KeyValue{Key: "jrpc_method", Value: attribute.StringValue(call.jrpcMethod)},
-						attribute.KeyValue{Key: "http_status", Value: attribute.IntValue(res.StatusCode())},
-					))
+					metrics.MirrorSuccessCount.Add(context.Background(), 1, metricAttributes)
 				} else {
 					loggedFields = append(loggedFields,
 						zap.Error(err),
 					)
 
 					l.Error("Failed to mirror the request", loggedFields...)
-
-					metrics.MirrorFailureCount.Add(context.Background(), 1, otelapi.WithAttributes(
-						attribute.KeyValue{Key: "proxy", Value: attribute.StringValue(p.cfg.Name)},
-						attribute.KeyValue{Key: "downstream_host", Value: attribute.StringValue(str(uri.Host()))},
-						attribute.KeyValue{Key: "jrpc_method", Value: attribute.StringValue(call.jrpcMethod)},
-					))
+					metrics.MirrorFailureCount.Add(context.Background(), 1, metricAttributes)
 				}
 
 				_ = l.Sync()
@@ -430,6 +457,28 @@ func (p *Proxy) handle(ctx *fasthttp.RequestCtx) {
 	}
 
 	_ = l.Sync()
+}
+
+func (p *Proxy) injectHttpError(_ *fasthttp.Request, res *fasthttp.Response) error {
+	res.SetStatusCode(fasthttp.StatusInternalServerError)
+	res.SetBody([]byte("chaos-injected error"))
+
+	return nil
+}
+
+func (p *Proxy) injectJrpcError(
+	jrpcID uint64, _ *fasthttp.Request, _ *fasthttp.Response,
+) func(_ *fasthttp.Request, _ *fasthttp.Response) error {
+	return func(_ *fasthttp.Request, res *fasthttp.Response) error {
+		res.SetStatusCode(fasthttp.StatusOK)
+		res.Header.Add("content-type", "application/json; charset=utf-8")
+		res.SetBody([]byte(fmt.Sprintf(
+			`{"jsonrpc":"2.0","id":%d,"error":{"code":-32042,"message:"chaos-injected error"}}`,
+			jrpcID,
+		)))
+
+		return nil
+	}
 }
 
 func (p *Proxy) upstreamConnectionChanged(conn net.Conn, state fasthttp.ConnState) {

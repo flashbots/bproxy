@@ -2,17 +2,6 @@ package proxy
 
 import "github.com/valyala/fasthttp"
 
-type Config struct {
-	Name          string
-	ListenAddress string
-
-	BackendURI string
-	PeerURIs   []string
-
-	LogRequests  bool
-	LogResponses bool
-}
-
 type triagedRequest struct {
 	proxy  bool
 	mirror bool
