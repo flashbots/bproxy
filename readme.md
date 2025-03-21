@@ -13,6 +13,7 @@ OPTIONS:
    AUTHRPC
 
    --authrpc-backend url                          url of backend authrpc (default: "http://127.0.0.1:18551") [$BPROXY_AUTHRPC_BACKEND]
+   --authrpc-enabled                              enable authrpc proxy (default: false) [$BPROXY_AUTHRPC_ENABLED]
    --authrpc-listen-address host:port             host:port for authrpc proxy (default: "0.0.0.0:8551") [$BPROXY_AUTHRPC_LISTEN_ADDRESS]
    --authrpc-log-requests                         whether to log authrpc requests (default: false) [$BPROXY_AUTHRPC_LOG_REQUESTS]
    --authrpc-log-responses                        whether to log responses to proxied/mirrored authrpc requests (default: false) [$BPROXY_AUTHRPC_LOG_RESPONSES]
@@ -24,8 +25,8 @@ OPTIONS:
    --chaos-enabled                                  whether bproxy should be injecting artificial error conditions (default: false) [$BPROXY_CHAOS_ENABLED]
    --chaos-injected-http-error-probability percent  probability in percent at which to randomly inject http errors into proxied responses (default: 20) [$BPROXY_CHAOS_INJECTED_HTTP_ERROR_PROBABILITY]
    --chaos-injected-jrpc-error-probability percent  probability in percent at which to randomly inject jrpc errors into proxied responses (default: 20) [$BPROXY_CHAOS_INJECTED_JRPC_ERROR_PROBABILITY]
-   --chaos-max-injected-latency latency             max latency to randomly add to every proxied response (default: 500ms) [$BPROXY_CHAOS_MAX_INJECTED_LATENCY]
-   --chaos-min-injected-latency latency             min latency to randomly add to every proxied response (default: 50ms) [$BPROXY_CHAOS_MIN_INJECTED_LATENCY]
+   --chaos-max-injected-latency latency             max latency to randomly enforce on every proxied response (default: 0s) [$BPROXY_CHAOS_MAX_INJECTED_LATENCY]
+   --chaos-min-injected-latency latency             min latency to enforce on every proxied response (default: 50ms) [$BPROXY_CHAOS_MIN_INJECTED_LATENCY]
 
    METRICS
 
@@ -34,6 +35,7 @@ OPTIONS:
    RPC
 
    --rpc-backend url                      url of backend rpc (default: "http://127.0.0.1:18545") [$BPROXY_RPC_BACKEND]
+   --rpc-enabled                          enable rpc proxy (default: false) [$BPROXY_RPC_ENABLED]
    --rpc-listen-address host:port         host:port for rpc proxy (default: "0.0.0.0:8545") [$BPROXY_RPC_LISTEN_ADDRESS]
    --rpc-log-requests                     whether to log rpc requests (default: false) [$BPROXY_RPC_LOG_REQUESTS]
    --rpc-log-responses                    whether to log responses to proxied/mirrored rpc requests (default: false) [$BPROXY_RPC_LOG_RESPONSES]
