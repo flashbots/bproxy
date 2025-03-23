@@ -15,6 +15,8 @@ type Proxy struct {
 	ListenAddress          string   `yaml:"listen_address"`
 	LogRequests            bool     `yaml:"log_requests"`
 	LogResponses           bool     `yaml:"log_responses"`
+	MaxRequestSize         int      `yaml:"max_request_size"`
+	MaxResponseSize        int      `yaml:"max_request_size"`
 	Peers                  []string `yaml:"peers"`
 	RemoveBackendFromPeers bool     `yaml:"remove_backend_from_peers"`
 }

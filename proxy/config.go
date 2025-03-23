@@ -6,6 +6,9 @@ type Config struct {
 	Name          string
 	ListenAddress string
 
+	MaxRequestSize  int
+	MaxResponseSize int
+
 	BackendURI string
 	PeerURIs   []string
 

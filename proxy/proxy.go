@@ -58,7 +58,7 @@ func newProxy(cfg *Config) (*Proxy, error) {
 		Handler:            p.handle,
 		IdleTimeout:        5 * time.Minute,
 		Logger:             logutils.FasthttpLogger(l),
-		MaxRequestBodySize: 64 * 1024,
+		MaxRequestBodySize: cfg.MaxRequestSize * 1024 * 1024,
 		Name:               cfg.Name,
 		ReadTimeout:        5 * time.Second,
 		WriteTimeout:       5 * time.Second,
@@ -66,6 +66,7 @@ func newProxy(cfg *Config) (*Proxy, error) {
 
 	p.backend = &fasthttp.Client{
 		MaxIdleConnDuration: 30 * time.Second,
+		MaxResponseBodySize: cfg.MaxResponseSize * 1024 * 1024,
 		Name:                cfg.Name,
 		ReadTimeout:         5 * time.Second,
 		WriteTimeout:        5 * time.Second,

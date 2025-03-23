@@ -17,8 +17,10 @@ OPTIONS:
    --authrpc-listen-address host:port             host:port for authrpc proxy (default: "0.0.0.0:8551") [$BPROXY_AUTHRPC_LISTEN_ADDRESS]
    --authrpc-log-requests                         whether to log authrpc requests (default: false) [$BPROXY_AUTHRPC_LOG_REQUESTS]
    --authrpc-log-responses                        whether to log responses to proxied/mirrored authrpc requests (default: false) [$BPROXY_AUTHRPC_LOG_RESPONSES]
+   --authrpc-max-request-size megabytes           maximum authrpc request payload size in megabytes (default: 15) [$BPROXY_AUTHRPC_MAX_REQUEST_SIZE]
+   --authrpc-max-response-size megabytes          maximum authrpc response payload size in megabytes (default: 160) [$BPROXY_AUTHRPC_MAX_RESPONSE_SIZE]
    --authrpc-peers urls [ --authrpc-peers urls ]  list of urls with authrpc peers to mirror the requests to [$BPROXY_AUTHRPC_PEERS]
-   --authrpc-remove-backend-from-peers            remove backend from peers (default: false) [$BPROXY_AUTHRPC_REMOVE_BACKEND_FROM_PEERS]
+   --authrpc-remove-backend-from-peers            remove authrpc backend from peers (default: false) [$BPROXY_AUTHRPC_REMOVE_BACKEND_FROM_PEERS]
 
    CHAOS
 
@@ -39,6 +41,8 @@ OPTIONS:
    --rpc-listen-address host:port         host:port for rpc proxy (default: "0.0.0.0:8545") [$BPROXY_RPC_LISTEN_ADDRESS]
    --rpc-log-requests                     whether to log rpc requests (default: false) [$BPROXY_RPC_LOG_REQUESTS]
    --rpc-log-responses                    whether to log responses to proxied/mirrored rpc requests (default: false) [$BPROXY_RPC_LOG_RESPONSES]
+   --rpc-max-request-size megabytes       maximum rpc request payload size in megabytes (default: 15) [$BPROXY_RPC_MAX_REQUEST_SIZE]
+   --rpc-max-response-size megabytes      maximum rpc response payload size in megabytes (default: 160) [$BPROXY_RPC_MAX_RESPONSE_SIZE]
    --rpc-peers urls [ --rpc-peers urls ]  list of urls with rpc peers to mirror the requests to [$BPROXY_RPC_PEERS]
-   --rpc-remove-backend-from-peers        remove backend from peers (default: false) [$BPROXY_RPC_REMOVE_BACKEND_FROM_PEERS]
+   --rpc-remove-backend-from-peers        remove rpc backend from peers (default: false) [$BPROXY_RPC_REMOVE_BACKEND_FROM_PEERS]
 ```

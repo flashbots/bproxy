@@ -21,13 +21,17 @@ serve:
 	@go run github.com/flashbots/bproxy/cmd \
 			--log-level info \
 		serve \
-			--authrpc-enabled \
 			--authrpc-backend http://127.0.0.1:8651 \
+			--authrpc-enabled \
 			--authrpc-listen-address 127.0.0.1:18651 \
 			--authrpc-log-requests \
 			--authrpc-log-responses \
-			--rpc-enabled \
+			--authrpc-max-request-size 150 \
+			--authrpc-max-response-size 1150 \
 			--rpc-backend http://127.0.0.1:8645 \
+			--rpc-enabled \
 			--rpc-listen-address 127.0.0.1:18645 \
 			--rpc-log-requests \
 			--rpc-log-responses
+			--rpc-max-request-size 150 \
+			--rpc-max-response-size 1150 \

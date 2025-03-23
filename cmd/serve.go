@@ -19,8 +19,99 @@ const (
 )
 
 func CommandServe(cfg *config.Config) *cli.Command {
-	peersAuthRPC := &cli.StringSlice{}
-	peersRPC := &cli.StringSlice{}
+	proxyFlags := func(
+		cfg *config.Proxy, category string, backend, listenAddress string,
+	) (flags []cli.Flag, peersFlag *cli.StringSlice) {
+		peersFlag = &cli.StringSlice{}
+
+		flags = []cli.Flag{
+			&cli.StringFlag{ // backend
+				Category:    strings.ToUpper(category),
+				Destination: &cfg.Backend,
+				EnvVars:     []string{envPrefix + strings.ToUpper(category) + "_BACKEND"},
+				Name:        category + "-backend",
+				Usage:       "`url` of backend " + category,
+				Value:       backend,
+			},
+
+			&cli.BoolFlag{ // enabled
+				Category:    strings.ToUpper(category),
+				Destination: &cfg.Enabled,
+				EnvVars:     []string{envPrefix + strings.ToUpper(category) + "_ENABLED"},
+				Name:        category + "-enabled",
+				Usage:       "enable " + category + " proxy",
+				Value:       false,
+			},
+
+			&cli.StringFlag{ // listen-address
+				Category:    strings.ToUpper(category),
+				Destination: &cfg.ListenAddress,
+				EnvVars:     []string{envPrefix + strings.ToUpper(category) + "_LISTEN_ADDRESS"},
+				Name:        category + "-listen-address",
+				Usage:       "`host:port` for " + category + " proxy",
+				Value:       listenAddress,
+			},
+
+			&cli.BoolFlag{ // log-requests
+				Category:    strings.ToUpper(category),
+				Destination: &cfg.LogRequests,
+				EnvVars:     []string{envPrefix + strings.ToUpper(category) + "_LOG_REQUESTS"},
+				Name:        category + "-log-requests",
+				Usage:       "whether to log " + category + " requests",
+				Value:       false,
+			},
+
+			&cli.BoolFlag{ // log-responses
+				Category:    strings.ToUpper(category),
+				Destination: &cfg.LogResponses,
+				EnvVars:     []string{envPrefix + strings.ToUpper(category) + "_LOG_RESPONSES"},
+				Name:        category + "-log-responses",
+				Usage:       "whether to log responses to proxied/mirrored " + category + " requests",
+				Value:       false,
+			},
+
+			&cli.IntFlag{ // max-request-size
+				Category:    strings.ToUpper(category),
+				Destination: &cfg.MaxRequestSize,
+				EnvVars:     []string{envPrefix + strings.ToUpper(category) + "_MAX_REQUEST_SIZE"},
+				Name:        category + "-max-request-size",
+				Usage:       "maximum " + category + " request payload size in `megabytes`",
+				Value:       15,
+			},
+
+			&cli.IntFlag{ // max-response-size
+				Category:    strings.ToUpper(category),
+				Destination: &cfg.MaxResponseSize,
+				EnvVars:     []string{envPrefix + strings.ToUpper(category) + "_MAX_RESPONSE_SIZE"},
+				Name:        category + "-max-response-size",
+				Usage:       "maximum " + category + " response payload size in `megabytes`",
+				Value:       160,
+			},
+
+			&cli.StringSliceFlag{ // peers
+				Category:    strings.ToUpper(category),
+				Destination: peersFlag,
+				EnvVars:     []string{envPrefix + strings.ToUpper(category) + "_PEERS"},
+				Name:        category + "-peers",
+				Usage:       "list of `urls` with " + category + " peers to mirror the requests to",
+			},
+
+			&cli.BoolFlag{ // remove-backend-from-peers
+				Category:    strings.ToUpper(category),
+				Destination: &cfg.RemoveBackendFromPeers,
+				EnvVars:     []string{envPrefix + strings.ToUpper(category) + "_REMOVE_BACKEND_FROM_PEERS"},
+				Name:        category + "-remove-backend-from-peers",
+				Usage:       "remove " + category + " backend from peers",
+				Value:       false,
+			},
+		}
+
+		return
+	}
+
+	authrpcFlags, peersAuthRPC := proxyFlags(
+		cfg.AuthRpcProxy, categoryAuthRPC, "http://127.0.0.1:18551", "0.0.0.0:8551",
+	)
 
 	chaosFlags := []cli.Flag{
 		&cli.BoolFlag{
@@ -68,133 +159,9 @@ func CommandServe(cfg *config.Config) *cli.Command {
 		},
 	}
 
-	authrpcFlags := []cli.Flag{
-		&cli.StringFlag{
-			Category:    strings.ToUpper(categoryAuthRPC),
-			Destination: &cfg.AuthRpcProxy.Backend,
-			EnvVars:     []string{envPrefix + strings.ToUpper(categoryAuthRPC) + "_BACKEND"},
-			Name:        categoryAuthRPC + "-backend",
-			Usage:       "`url` of backend authrpc",
-			Value:       "http://127.0.0.1:18551",
-		},
-
-		&cli.BoolFlag{
-			Category:    strings.ToUpper(categoryAuthRPC),
-			Destination: &cfg.AuthRpcProxy.Enabled,
-			EnvVars:     []string{envPrefix + strings.ToUpper(categoryAuthRPC) + "_ENABLED"},
-			Name:        categoryAuthRPC + "-enabled",
-			Usage:       "enable authrpc proxy",
-			Value:       false,
-		},
-
-		&cli.StringFlag{
-			Category:    strings.ToUpper(categoryAuthRPC),
-			Destination: &cfg.AuthRpcProxy.ListenAddress,
-			EnvVars:     []string{envPrefix + strings.ToUpper(categoryAuthRPC) + "_LISTEN_ADDRESS"},
-			Name:        categoryAuthRPC + "-listen-address",
-			Usage:       "`host:port` for authrpc proxy",
-			Value:       "0.0.0.0:8551",
-		},
-
-		&cli.BoolFlag{
-			Category:    strings.ToUpper(categoryAuthRPC),
-			Destination: &cfg.AuthRpcProxy.LogRequests,
-			EnvVars:     []string{envPrefix + strings.ToUpper(categoryAuthRPC) + "_LOG_REQUESTS"},
-			Name:        categoryAuthRPC + "-log-requests",
-			Usage:       "whether to log authrpc requests",
-			Value:       false,
-		},
-
-		&cli.BoolFlag{
-			Category:    strings.ToUpper(categoryAuthRPC),
-			Destination: &cfg.AuthRpcProxy.LogResponses,
-			EnvVars:     []string{envPrefix + strings.ToUpper(categoryAuthRPC) + "_LOG_RESPONSES"},
-			Name:        categoryAuthRPC + "-log-responses",
-			Usage:       "whether to log responses to proxied/mirrored authrpc requests",
-			Value:       false,
-		},
-
-		&cli.StringSliceFlag{
-			Category:    strings.ToUpper(categoryAuthRPC),
-			Destination: peersAuthRPC,
-			EnvVars:     []string{envPrefix + strings.ToUpper(categoryAuthRPC) + "_PEERS"},
-			Name:        categoryAuthRPC + "-peers",
-			Usage:       "list of `urls` with authrpc peers to mirror the requests to",
-		},
-
-		&cli.BoolFlag{
-			Category:    strings.ToUpper(categoryAuthRPC),
-			Destination: &cfg.AuthRpcProxy.RemoveBackendFromPeers,
-			EnvVars:     []string{envPrefix + strings.ToUpper(categoryAuthRPC) + "_REMOVE_BACKEND_FROM_PEERS"},
-			Name:        categoryAuthRPC + "-remove-backend-from-peers",
-			Usage:       "remove backend from peers",
-			Value:       false,
-		},
-	}
-
-	rpcFlags := []cli.Flag{
-		&cli.StringFlag{
-			Category:    strings.ToUpper(categoryRPC),
-			Destination: &cfg.RpcProxy.Backend,
-			EnvVars:     []string{envPrefix + strings.ToUpper(categoryRPC) + "_BACKEND"},
-			Name:        categoryRPC + "-backend",
-			Usage:       "`url` of backend rpc",
-			Value:       "http://127.0.0.1:18545",
-		},
-
-		&cli.BoolFlag{
-			Category:    strings.ToUpper(categoryRPC),
-			Destination: &cfg.RpcProxy.Enabled,
-			EnvVars:     []string{envPrefix + strings.ToUpper(categoryRPC) + "_ENABLED"},
-			Name:        categoryRPC + "-enabled",
-			Usage:       "enable rpc proxy",
-			Value:       false,
-		},
-
-		&cli.StringFlag{
-			Category:    strings.ToUpper(categoryRPC),
-			Destination: &cfg.RpcProxy.ListenAddress,
-			EnvVars:     []string{envPrefix + strings.ToUpper(categoryRPC) + "_LISTEN_ADDRESS"},
-			Name:        categoryRPC + "-listen-address",
-			Usage:       "`host:port` for rpc proxy",
-			Value:       "0.0.0.0:8545",
-		},
-
-		&cli.BoolFlag{
-			Category:    strings.ToUpper(categoryRPC),
-			Destination: &cfg.RpcProxy.LogRequests,
-			EnvVars:     []string{envPrefix + strings.ToUpper(categoryRPC) + "_LOG_REQUESTS"},
-			Name:        categoryRPC + "-log-requests",
-			Usage:       "whether to log rpc requests",
-			Value:       false,
-		},
-
-		&cli.BoolFlag{
-			Category:    strings.ToUpper(categoryRPC),
-			Destination: &cfg.RpcProxy.LogResponses,
-			EnvVars:     []string{envPrefix + strings.ToUpper(categoryRPC) + "_LOG_RESPONSES"},
-			Name:        categoryRPC + "-log-responses",
-			Usage:       "whether to log responses to proxied/mirrored rpc requests",
-			Value:       false,
-		},
-
-		&cli.StringSliceFlag{
-			Category:    strings.ToUpper(categoryRPC),
-			Destination: peersRPC,
-			EnvVars:     []string{envPrefix + strings.ToUpper(categoryRPC) + "_PEERS"},
-			Name:        categoryRPC + "-peers",
-			Usage:       "list of `urls` with rpc peers to mirror the requests to",
-		},
-
-		&cli.BoolFlag{
-			Category:    strings.ToUpper(categoryRPC),
-			Destination: &cfg.RpcProxy.RemoveBackendFromPeers,
-			EnvVars:     []string{envPrefix + strings.ToUpper(categoryRPC) + "_REMOVE_BACKEND_FROM_PEERS"},
-			Name:        categoryRPC + "-remove-backend-from-peers",
-			Usage:       "remove backend from peers",
-			Value:       false,
-		},
-	}
+	rpcFlags, peersRPC := proxyFlags(
+		cfg.RpcProxy, categoryRPC, "http://127.0.0.1:18545", "0.0.0.0:8545",
+	)
 
 	metricsFlags := []cli.Flag{
 		&cli.StringFlag{
