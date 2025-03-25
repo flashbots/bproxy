@@ -206,6 +206,15 @@ func (p *Proxy) handle(ctx *fasthttp.RequestCtx) {
 				zap.Bool("chaos_jrpc_error", true),
 			)
 
+		case p.cfg.Chaos.Enabled && rand.Float64() < p.cfg.Chaos.InjectedInvalidJrpcResponseProbability/100:
+			proxy = p.injectInvalidJrpcResponse
+			res = fasthttp.AcquireResponse()
+			call.proxy = false
+			call.mirror = false
+			loggedFields = append(loggedFields,
+				zap.Bool("chaos_invalid_jrpc_response", true),
+			)
+
 		case call.proxy:
 			proxy = p.backend.Do
 			res = fasthttp.AcquireResponse()
@@ -492,6 +501,14 @@ func (p *Proxy) injectJrpcError(
 
 		return nil
 	}
+}
+
+func (p *Proxy) injectInvalidJrpcResponse(_ *fasthttp.Request, res *fasthttp.Response) error {
+	res.SetStatusCode(fasthttp.StatusOK)
+	res.Header.Add("content-type", "application/json; charset=utf-8")
+	res.SetBody([]byte("chaos-injected invalid jrpc response"))
+
+	return nil
 }
 
 func (p *Proxy) upstreamConnectionChanged(conn net.Conn, state fasthttp.ConnState) {

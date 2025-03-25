@@ -11,17 +11,19 @@ import (
 type Chaos struct {
 	Enabled bool `yaml:"enabled"`
 
-	MinInjectedLatency           time.Duration `yaml:"min_injected_latency"`
-	MaxInjectedLatency           time.Duration `yaml:"max_injected_latency"`
-	InjectedHttpErrorProbability float64       `yaml:"injected_http_error_probability"`
-	InjectedJrpcErrorProbability float64       `yaml:"injected_jrpc_error_probability"`
+	MinInjectedLatency                     time.Duration `yaml:"min_injected_latency"`
+	MaxInjectedLatency                     time.Duration `yaml:"max_injected_latency"`
+	InjectedHttpErrorProbability           float64       `yaml:"injected_http_error_probability"`
+	InjectedJrpcErrorProbability           float64       `yaml:"injected_jrpc_error_probability"`
+	InjectedInvalidJrpcResponseProbability float64       `yaml:"injected_invalid_jrpc_response_probability"`
 }
 
 var (
-	errChaosInvalidMinInjectedLatency           = errors.New("invalid min injected latency")
-	errChaosInvalidMaxInjectedLatency           = errors.New("invalid max injected latency")
-	errChaosInvalidInjectedHttpErrorProbability = errors.New("invalid injected http error probability (must be in [0, 100] range)")
-	errChaosInvalidInjectedJrpcErrorProbability = errors.New("invalid injected jrpc error probability (must be in [0, 100] range)")
+	errChaosInvalidMinInjectedLatency                     = errors.New("invalid min injected latency")
+	errChaosInvalidMaxInjectedLatency                     = errors.New("invalid max injected latency")
+	errChaosInvalidInjectedHttpErrorProbability           = errors.New("injected http error probability must be in [0, 100] range")
+	errChaosInvalidInjectedJrpcErrorProbability           = errors.New("injected jrpc error probability must be in [0, 100] range")
+	errChaosInvalidInjectedInvalidJrpcResponseProbability = errors.New("injected invalid jrpc error probability must be in [0, 100] range")
 )
 
 func (cfg *Chaos) Validate() error {
@@ -79,5 +81,13 @@ func (cfg *Chaos) Validate() error {
 		}
 	}
 
+	{ // injected invalid jrpc response probability
+		if cfg.InjectedInvalidJrpcResponseProbability < 0 || cfg.InjectedInvalidJrpcResponseProbability > 100 {
+			errs = append(errs, fmt.Errorf("%w: %f",
+				errChaosInvalidInjectedInvalidJrpcResponseProbability,
+				cfg.InjectedInvalidJrpcResponseProbability,
+			))
+		}
+	}
 	return utils.FlattenErrors(errs)
 }

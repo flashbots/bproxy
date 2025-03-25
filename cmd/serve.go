@@ -141,6 +141,15 @@ func CommandServe(cfg *config.Config) *cli.Command {
 			Value:       20,
 		},
 
+		&cli.Float64Flag{
+			Category:    strings.ToUpper(categoryChaos),
+			Destination: &cfg.Chaos.InjectedInvalidJrpcResponseProbability,
+			EnvVars:     []string{envPrefix + strings.ToUpper(categoryChaos) + "_INJECTED_INVALID_JRPC_RESPONSE_PROBABILITY"},
+			Name:        categoryChaos + "-injected-invalid-jrpc-response-probability",
+			Usage:       "probability in `percent` at which to randomly inject invalid jrpc into proxied responses",
+			Value:       20,
+		},
+
 		&cli.DurationFlag{
 			Category:    strings.ToUpper(categoryChaos),
 			Destination: &cfg.Chaos.MinInjectedLatency,
