@@ -32,6 +32,7 @@ dockers:
     build_flag_templates:
       - --platform=linux/amd64
     image_templates:
+      - "flashbots/bproxy:{{ .Tag }}-amd64"
       - "ghcr.io/flashbots/bproxy:{{ .Tag }}-amd64"
 
   - dockerfile: Dockerfile.goreleaser
@@ -41,9 +42,14 @@ dockers:
     build_flag_templates:
       - --platform=linux/arm64
     image_templates:
+      - "flashbots/bproxy:{{ .Tag }}-arm64"
       - "ghcr.io/flashbots/bproxy:{{ .Tag }}-arm64"
 
 docker_manifests:
+  - name_template: "flashbots/bproxy:{{ .Tag }}"
+    image_templates:
+      - "flashbots/bproxy:{{ .Tag }}-amd64"
+      - "flashbots/bproxy:{{ .Tag }}-arm64"
   - name_template: "ghcr.io/flashbots/bproxy:{{ .Tag }}"
     image_templates:
       - "ghcr.io/flashbots/bproxy:{{ .Tag }}-amd64"
