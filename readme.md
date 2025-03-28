@@ -24,11 +24,12 @@ OPTIONS:
 
    CHAOS
 
-   --chaos-enabled                                  whether bproxy should be injecting artificial error conditions (default: false) [$BPROXY_CHAOS_ENABLED]
-   --chaos-injected-http-error-probability percent  probability in percent at which to randomly inject http errors into proxied responses (default: 20) [$BPROXY_CHAOS_INJECTED_HTTP_ERROR_PROBABILITY]
-   --chaos-injected-jrpc-error-probability percent  probability in percent at which to randomly inject jrpc errors into proxied responses (default: 20) [$BPROXY_CHAOS_INJECTED_JRPC_ERROR_PROBABILITY]
-   --chaos-max-injected-latency latency             max latency to randomly enforce on every proxied response (default: 0s) [$BPROXY_CHAOS_MAX_INJECTED_LATENCY]
-   --chaos-min-injected-latency latency             min latency to enforce on every proxied response (default: 50ms) [$BPROXY_CHAOS_MIN_INJECTED_LATENCY]
+   --chaos-enabled                                             whether bproxy should be injecting artificial error conditions (default: false) [$BPROXY_CHAOS_ENABLED]
+   --chaos-injected-http-error-probability percent             probability in percent at which to randomly inject http errors into proxied responses (default: 20) [$BPROXY_CHAOS_INJECTED_HTTP_ERROR_PROBABILITY]
+   --chaos-injected-invalid-jrpc-response-probability percent  probability in percent at which to randomly inject invalid jrpc into proxied responses (default: 20) [$BPROXY_CHAOS_INJECTED_INVALID_JRPC_RESPONSE_PROBABILITY]
+   --chaos-injected-jrpc-error-probability percent             probability in percent at which to randomly inject jrpc errors into proxied responses (default: 20) [$BPROXY_CHAOS_INJECTED_JRPC_ERROR_PROBABILITY]
+   --chaos-max-injected-latency latency                        max latency to randomly enforce on every proxied response (default: 0s) [$BPROXY_CHAOS_MAX_INJECTED_LATENCY]
+   --chaos-min-injected-latency latency                        min latency to enforce on every proxied response (default: 50ms) [$BPROXY_CHAOS_MIN_INJECTED_LATENCY]
 
    METRICS
 

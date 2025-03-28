@@ -78,14 +78,14 @@ func (p *AuthrpcProxy) stop() {
 	p.tickerSeenHeads.Stop()
 }
 
-func (p *AuthrpcProxy) triage(body []byte) triagedRequest {
+func (p *AuthrpcProxy) triage(body []byte) *triagedRequest {
 	// proxy & don't mirror un-parse-able requests as-is
 	jrpc := types.JrpcCall{}
 	if err := json.Unmarshal(body, &jrpc); err != nil {
 		p.Proxy.logger.Warn("Failed to parse authrpc call body",
 			zap.Error(err),
 		)
-		return triagedRequest{
+		return &triagedRequest{
 			proxy: true,
 		}
 	}
@@ -93,7 +93,7 @@ func (p *AuthrpcProxy) triage(body []byte) triagedRequest {
 	switch jrpc.Method {
 	default:
 		// only proxy
-		return triagedRequest{
+		return &triagedRequest{
 			proxy:      true,
 			jrpcMethod: jrpc.Method,
 			jrpcID:     jrpc.ID,
@@ -101,7 +101,7 @@ func (p *AuthrpcProxy) triage(body []byte) triagedRequest {
 
 	case "engine_newPayloadV3":
 		// mirror & proxy all
-		return triagedRequest{
+		return &triagedRequest{
 			proxy:      true,
 			mirror:     true,
 			jrpcMethod: jrpc.Method,
@@ -119,7 +119,7 @@ func (p *AuthrpcProxy) triage(body []byte) triagedRequest {
 			}
 
 			if err != nil || fcuv3.HasExtraPayload() {
-				return triagedRequest{
+				return &triagedRequest{
 					proxy:      true,
 					mirror:     true,
 					jrpcMethod: jrpc.Method,
@@ -133,7 +133,7 @@ func (p *AuthrpcProxy) triage(body []byte) triagedRequest {
 			p.Proxy.logger.Warn("Failed to parse call body of FCUv3 w/o extra attributes",
 				zap.Error(err),
 			)
-			return triagedRequest{
+			return &triagedRequest{
 				proxy:      true,
 				mirror:     true,
 				jrpcMethod: jrpc.Method,
@@ -162,14 +162,14 @@ func (p *AuthrpcProxy) triage(body []byte) triagedRequest {
 				jrpc.ID, head,
 			)))
 
-			return triagedRequest{
+			return &triagedRequest{
 				jrpcMethod: jrpc.Method,
 				jrpcID:     jrpc.ID,
 				response:   res,
 			}
 		}
 
-		return triagedRequest{
+		return &triagedRequest{
 			proxy:      true,
 			mirror:     true,
 			jrpcMethod: jrpc.Method,

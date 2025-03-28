@@ -32,7 +32,7 @@ type Proxy struct {
 
 	logger *zap.Logger
 
-	triage func(body []byte) triagedRequest
+	triage func(body []byte) *triagedRequest
 	run    func()
 	stop   func()
 
@@ -156,8 +156,8 @@ func (p *Proxy) ResetConnections() {
 	}
 }
 
-func (p *Proxy) defaultTriage(body []byte) triagedRequest {
-	return triagedRequest{}
+func (p *Proxy) defaultTriage(body []byte) *triagedRequest {
+	return &triagedRequest{}
 }
 
 func (p *Proxy) handle(ctx *fasthttp.RequestCtx) {
@@ -235,9 +235,20 @@ func (p *Proxy) handle(ctx *fasthttp.RequestCtx) {
 			zap.Uint64("jrpc_id", call.jrpcID),
 		)
 
-		if call.txHash != "" {
+		if call.tx != nil {
+			if call.tx.From != nil {
+				loggedFields = append(loggedFields,
+					zap.String("tx_from", call.tx.From.String()),
+				)
+			}
+			if call.tx.To != nil {
+				loggedFields = append(loggedFields,
+					zap.String("tx_to", call.tx.To.String()),
+				)
+			}
 			loggedFields = append(loggedFields,
-				zap.String("tx_hash", call.txHash),
+				zap.Uint64("tx_nonce", call.tx.Nonce),
+				zap.String("tx_hash", call.tx.Hash.String()),
 			)
 		}
 
