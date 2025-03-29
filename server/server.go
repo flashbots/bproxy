@@ -40,15 +40,9 @@ func New(cfg *config.Config) (*Server, error) {
 
 	if cfg.AuthRpcProxy.Enabled {
 		authrpc, err := proxy.NewAuthrpcProxy(&proxy.Config{
-			BackendURI:      cfg.AuthRpcProxy.Backend,
-			Chaos:           s.cfg.Chaos,
-			ListenAddress:   cfg.AuthRpcProxy.ListenAddress,
-			LogRequests:     cfg.AuthRpcProxy.LogRequests,
-			LogResponses:    cfg.AuthRpcProxy.LogResponses,
-			MaxRequestSize:  cfg.AuthRpcProxy.MaxRequestSize,
-			MaxResponseSize: cfg.AuthRpcProxy.MaxResponseSize,
-			Name:            "bproxy-authrpc",
-			PeerURIs:        cfg.AuthRpcProxy.Peers,
+			Name:  "bproxy-authrpc",
+			Chaos: s.cfg.Chaos,
+			Proxy: s.cfg.AuthRpcProxy,
 		})
 		if err != nil {
 			return nil, err
@@ -58,15 +52,9 @@ func New(cfg *config.Config) (*Server, error) {
 
 	if cfg.RpcProxy.Enabled {
 		rpc, err := proxy.NewRpcProxy(&proxy.Config{
-			BackendURI:      cfg.RpcProxy.Backend,
-			Chaos:           s.cfg.Chaos,
-			ListenAddress:   cfg.RpcProxy.ListenAddress,
-			LogRequests:     cfg.RpcProxy.LogRequests,
-			LogResponses:    cfg.RpcProxy.LogResponses,
-			MaxRequestSize:  cfg.RpcProxy.MaxRequestSize,
-			MaxResponseSize: cfg.RpcProxy.MaxResponseSize,
-			Name:            "bproxy-rpc",
-			PeerURIs:        cfg.RpcProxy.Peers,
+			Name:  "bproxy-rpc",
+			Chaos: s.cfg.Chaos,
+			Proxy: s.cfg.RpcProxy,
 		})
 		if err != nil {
 			return nil, err

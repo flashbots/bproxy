@@ -3,16 +3,8 @@ package proxy
 import "github.com/flashbots/bproxy/config"
 
 type Config struct {
-	Name          string
-	ListenAddress string
+	Name string
 
-	MaxRequestSize  int
-	MaxResponseSize int
-
-	BackendURI string
-	PeerURIs   []string
-
-	Chaos        *config.Chaos
-	LogRequests  bool
-	LogResponses bool
+	Chaos *config.Chaos
+	Proxy *config.Proxy
 }

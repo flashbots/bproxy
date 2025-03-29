@@ -56,30 +56,33 @@ func newProxy(cfg *Config) (*Proxy, error) {
 	p.frontend = &fasthttp.Server{
 		ConnState:          p.upstreamConnectionChanged,
 		Handler:            p.handle,
-		IdleTimeout:        5 * time.Minute,
+		IdleTimeout:        30 * time.Second,
 		Logger:             logutils.FasthttpLogger(l),
-		MaxRequestBodySize: cfg.MaxRequestSize * 1024 * 1024,
+		MaxConnsPerIP:      cfg.Proxy.MaxClientConnectionsPerIP,
+		MaxRequestBodySize: cfg.Proxy.MaxRequestSize * 1024 * 1024,
 		Name:               cfg.Name,
 		ReadTimeout:        5 * time.Second,
 		WriteTimeout:       5 * time.Second,
 	}
 
 	p.backend = &fasthttp.Client{
+		MaxConnsPerHost:     cfg.Proxy.MaxBackendConnectionsPerHost,
+		MaxConnWaitTimeout:  cfg.Proxy.MaxBackendConnectionWaitTimeout,
 		MaxIdleConnDuration: 30 * time.Second,
-		MaxResponseBodySize: cfg.MaxResponseSize * 1024 * 1024,
+		MaxResponseBodySize: cfg.Proxy.MaxResponseSize * 1024 * 1024,
 		Name:                cfg.Name,
 		ReadTimeout:         5 * time.Second,
 		WriteTimeout:        5 * time.Second,
 	}
 
 	p.backendURI = fasthttp.AcquireURI()
-	if err := p.backendURI.Parse(nil, []byte(cfg.BackendURI)); err != nil {
+	if err := p.backendURI.Parse(nil, []byte(cfg.Proxy.Backend)); err != nil {
 		fasthttp.ReleaseURI(p.backendURI)
 		return nil, err
 	}
 
-	p.peerURIs = make([]*fasthttp.URI, 0, len(cfg.PeerURIs))
-	for _, peerURI := range cfg.PeerURIs {
+	p.peerURIs = make([]*fasthttp.URI, 0, len(cfg.Proxy.Peers))
+	for _, peerURI := range cfg.Proxy.Peers {
 		uri := fasthttp.AcquireURI()
 		if err := uri.Parse(nil, []byte(peerURI)); err != nil {
 			fasthttp.ReleaseURI(p.backendURI)
@@ -107,11 +110,11 @@ func (p *Proxy) Run(ctx context.Context, failure chan<- error) {
 
 	go func() { // run the authrpc proxy
 		l.Info("Proxy is going up...",
-			zap.String("listen_address", p.cfg.ListenAddress),
-			zap.String("backend", p.cfg.BackendURI),
-			zap.Strings("peers", p.cfg.PeerURIs),
+			zap.String("listen_address", p.cfg.Proxy.ListenAddress),
+			zap.String("backend", p.cfg.Proxy.Backend),
+			zap.Strings("peers", p.cfg.Proxy.Peers),
 		)
-		if err := p.frontend.ListenAndServe(p.cfg.ListenAddress); err != nil {
+		if err := p.frontend.ListenAndServe(p.cfg.Proxy.ListenAddress); err != nil {
 			failure <- err
 		}
 		l.Info("Proxy is down")
@@ -162,7 +165,7 @@ func (p *Proxy) defaultTriage(body []byte) *triagedRequest {
 
 func (p *Proxy) handle(ctx *fasthttp.RequestCtx) {
 	var (
-		start = time.Now()
+		tsReqReceived = time.Now()
 
 		l  *zap.Logger
 		wg sync.WaitGroup
@@ -187,33 +190,35 @@ func (p *Proxy) handle(ctx *fasthttp.RequestCtx) {
 
 		loggedFields := make([]zap.Field, 0, 12)
 
-		switch {
-		case p.cfg.Chaos.Enabled && rand.Float64() < p.cfg.Chaos.InjectedHttpErrorProbability/100:
-			proxy = p.injectHttpError
-			res = fasthttp.AcquireResponse()
-			call.proxy = false
-			call.mirror = false
-			loggedFields = append(loggedFields,
-				zap.Bool("chaos_http_error", true),
-			)
-
-		case p.cfg.Chaos.Enabled && rand.Float64() < p.cfg.Chaos.InjectedJrpcErrorProbability/100:
-			proxy = p.injectJrpcError(call.jrpcID, req, res)
-			res = fasthttp.AcquireResponse()
-			call.proxy = false
-			call.mirror = false
-			loggedFields = append(loggedFields,
-				zap.Bool("chaos_jrpc_error", true),
-			)
-
-		case p.cfg.Chaos.Enabled && rand.Float64() < p.cfg.Chaos.InjectedInvalidJrpcResponseProbability/100:
-			proxy = p.injectInvalidJrpcResponse
-			res = fasthttp.AcquireResponse()
-			call.proxy = false
-			call.mirror = false
-			loggedFields = append(loggedFields,
-				zap.Bool("chaos_invalid_jrpc_response", true),
-			)
+		switch { // configure processing mode (proxy, fake, chaos)
+		case p.cfg.Chaos.Enabled:
+			if rand.Float64() < p.cfg.Chaos.InjectedHttpErrorProbability/100 { // inject http error
+				proxy = p.injectHttpError
+				res = fasthttp.AcquireResponse()
+				call.proxy = false
+				call.mirror = false
+				loggedFields = append(loggedFields,
+					zap.Bool("chaos_http_error", true),
+				)
+			}
+			if rand.Float64() < p.cfg.Chaos.InjectedJrpcErrorProbability/100 { // inject jrpc error
+				proxy = p.injectJrpcError(call.jrpcID, req, res)
+				res = fasthttp.AcquireResponse()
+				call.proxy = false
+				call.mirror = false
+				loggedFields = append(loggedFields,
+					zap.Bool("chaos_jrpc_error", true),
+				)
+			}
+			if rand.Float64() < p.cfg.Chaos.InjectedInvalidJrpcResponseProbability/100 { // inject bad jrpc response
+				proxy = p.injectInvalidJrpcResponse
+				res = fasthttp.AcquireResponse()
+				call.proxy = false
+				call.mirror = false
+				loggedFields = append(loggedFields,
+					zap.Bool("chaos_invalid_jrpc_response", true),
+				)
+			}
 
 		case call.proxy:
 			proxy = p.backend.Do
@@ -227,10 +232,12 @@ func (p *Proxy) handle(ctx *fasthttp.RequestCtx) {
 		defer fasthttp.ReleaseResponse(res)
 
 		loggedFields = append(loggedFields,
+			zap.Time("tx_request_received", tsReqReceived),
 			zap.Bool("proxy", call.proxy),
 			zap.Bool("mirror", call.mirror),
 			zap.Uint64("connection_id", ctx.ConnID()),
 			zap.String("remote_addr", ctx.RemoteAddr().String()),
+			zap.String("downstream_host", str(p.backendURI.Host())),
 			zap.String("jrpc_method", call.jrpcMethod),
 			zap.Uint64("jrpc_id", call.jrpcID),
 		)
@@ -264,14 +271,12 @@ func (p *Proxy) handle(ctx *fasthttp.RequestCtx) {
 			loggedFields = make([]zap.Field, 0, 12)
 		)
 
+		tsReqProxyStart := time.Now()
 		err := proxy(req, res)
+		tsReqProxyEnd := time.Now()
 
 		{ // add log fields
-			loggedFields = append(loggedFields,
-				zap.String("downstream_host", str(p.backendURI.Host())),
-			)
-
-			if p.cfg.LogRequests {
+			if p.cfg.Proxy.LogRequests {
 				var jsonRequest interface{}
 				if err := json.Unmarshal(req.Body(), &jsonRequest); err == nil {
 					loggedFields = append(loggedFields,
@@ -307,20 +312,16 @@ func (p *Proxy) handle(ctx *fasthttp.RequestCtx) {
 		if p.cfg.Chaos.Enabled { // chaos-inject latency
 			latency := time.Duration(rand.Int64N(int64(p.cfg.Chaos.MaxInjectedLatency) + 1))
 			latency = max(latency, p.cfg.Chaos.MinInjectedLatency)
-			time.Sleep(latency - time.Since(start))
+			time.Sleep(latency - time.Since(tsReqReceived))
 			loggedFields = append(loggedFields,
 				zap.Bool("chaos_latency", true),
 			)
 		}
 		res.CopyTo(&ctx.Response)
+		tsResProxyEnd := time.Now()
 
 		{ // add log fields
-			loggedFields = append(loggedFields,
-				zap.Duration("http_latency", time.Since(start)),
-				zap.Int("http_status", res.StatusCode()),
-			)
-
-			if p.cfg.LogResponses {
+			if p.cfg.Proxy.LogResponses {
 				switch str(res.Header.ContentEncoding()) {
 				default:
 					var jsonResponse interface{}
@@ -354,6 +355,15 @@ func (p *Proxy) handle(ctx *fasthttp.RequestCtx) {
 					}
 				}
 			}
+
+			now := time.Now()
+			loggedFields = append(loggedFields,
+				zap.Int("http_status", res.StatusCode()),
+				zap.Duration("latency_warmup", tsReqProxyStart.Sub(tsReqReceived)),
+				zap.Duration("latency_backend", tsReqProxyEnd.Sub(tsReqProxyStart)),
+				zap.Duration("latency_cooldown", now.Sub(tsResProxyEnd)),
+				zap.Duration("latency_total", now.Sub(tsReqReceived)),
+			)
 		}
 
 		if call.proxy {
@@ -390,7 +400,7 @@ func (p *Proxy) handle(ctx *fasthttp.RequestCtx) {
 						zap.String("downstream_host", str(uri.Host())),
 					)
 
-					if p.cfg.LogRequests {
+					if p.cfg.Proxy.LogRequests {
 						var jsonRequest interface{}
 						if err := json.Unmarshal(req.Body(), &jsonRequest); err == nil {
 							loggedFields = append(loggedFields,
@@ -416,7 +426,7 @@ func (p *Proxy) handle(ctx *fasthttp.RequestCtx) {
 							zap.Int("http_status", res.StatusCode()),
 						)
 
-						if p.cfg.LogResponses {
+						if p.cfg.Proxy.LogResponses {
 							switch str(res.Header.ContentEncoding()) {
 							default:
 								var jsonResponse interface{}

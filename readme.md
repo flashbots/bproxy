@@ -12,15 +12,18 @@ bproxy serve [command options]
 OPTIONS:
    AUTHRPC
 
-   --authrpc-backend url                          url of backend authrpc (default: "http://127.0.0.1:18551") [$BPROXY_AUTHRPC_BACKEND]
-   --authrpc-enabled                              enable authrpc proxy (default: false) [$BPROXY_AUTHRPC_ENABLED]
-   --authrpc-listen-address host:port             host:port for authrpc proxy (default: "0.0.0.0:8551") [$BPROXY_AUTHRPC_LISTEN_ADDRESS]
-   --authrpc-log-requests                         whether to log authrpc requests (default: false) [$BPROXY_AUTHRPC_LOG_REQUESTS]
-   --authrpc-log-responses                        whether to log responses to proxied/mirrored authrpc requests (default: false) [$BPROXY_AUTHRPC_LOG_RESPONSES]
-   --authrpc-max-request-size megabytes           maximum authrpc request payload size in megabytes (default: 15) [$BPROXY_AUTHRPC_MAX_REQUEST_SIZE]
-   --authrpc-max-response-size megabytes          maximum authrpc response payload size in megabytes (default: 160) [$BPROXY_AUTHRPC_MAX_RESPONSE_SIZE]
-   --authrpc-peers urls [ --authrpc-peers urls ]  list of urls with authrpc peers to mirror the requests to [$BPROXY_AUTHRPC_PEERS]
-   --authrpc-remove-backend-from-peers            remove authrpc backend from peers (default: false) [$BPROXY_AUTHRPC_REMOVE_BACKEND_FROM_PEERS]
+   --authrpc-backend url                                   url of backend authrpc (default: "http://127.0.0.1:18551") [$BPROXY_AUTHRPC_BACKEND]
+   --authrpc-enabled                                       enable authrpc proxy (default: false) [$BPROXY_AUTHRPC_ENABLED]
+   --authrpc-listen-address host:port                      host:port for authrpc proxy (default: "0.0.0.0:8551") [$BPROXY_AUTHRPC_LISTEN_ADDRESS]
+   --authrpc-log-requests                                  whether to log authrpc requests (default: false) [$BPROXY_AUTHRPC_LOG_REQUESTS]
+   --authrpc-log-responses                                 whether to log responses to proxied/mirrored authrpc requests (default: false) [$BPROXY_AUTHRPC_LOG_RESPONSES]
+   --authrpc-max-backend-connection-wait-timeout duration  maximum duration to wait for a free authrpc backend connection (0s means don't wait) (default: 0s) [$BPROXY_AUTHRPC_MAX_BACKEND_CONNECTION_WAIT_TIMEOUT]
+   --authrpc-max-backend-connections-per-host count        maximum connections count per authrpc backend host (default: 512) [$BPROXY_AUTHRPC_MAX_BACKEND_CONNECTIONS_PER_HOST]
+   --authrpc-max-client-connections-per-ip count           maximum authrpc client tcp connections count per ip (0 means unlimited) (default: 0) [$BPROXY_AUTHRPC_MAX_CLIENT_CONNECTIONS_PER_IP]
+   --authrpc-max-request-size megabytes                    maximum authrpc request payload size in megabytes (default: 15) [$BPROXY_AUTHRPC_MAX_REQUEST_SIZE]
+   --authrpc-max-response-size megabytes                   maximum authrpc response payload size in megabytes (default: 160) [$BPROXY_AUTHRPC_MAX_RESPONSE_SIZE]
+   --authrpc-peers urls [ --authrpc-peers urls ]           list of urls with authrpc peers to mirror the requests to [$BPROXY_AUTHRPC_PEERS]
+   --authrpc-remove-backend-from-peers                     remove authrpc backend from peers (default: false) [$BPROXY_AUTHRPC_REMOVE_BACKEND_FROM_PEERS]
 
    CHAOS
 
@@ -37,13 +40,16 @@ OPTIONS:
 
    RPC
 
-   --rpc-backend url                      url of backend rpc (default: "http://127.0.0.1:18545") [$BPROXY_RPC_BACKEND]
-   --rpc-enabled                          enable rpc proxy (default: false) [$BPROXY_RPC_ENABLED]
-   --rpc-listen-address host:port         host:port for rpc proxy (default: "0.0.0.0:8545") [$BPROXY_RPC_LISTEN_ADDRESS]
-   --rpc-log-requests                     whether to log rpc requests (default: false) [$BPROXY_RPC_LOG_REQUESTS]
-   --rpc-log-responses                    whether to log responses to proxied/mirrored rpc requests (default: false) [$BPROXY_RPC_LOG_RESPONSES]
-   --rpc-max-request-size megabytes       maximum rpc request payload size in megabytes (default: 15) [$BPROXY_RPC_MAX_REQUEST_SIZE]
-   --rpc-max-response-size megabytes      maximum rpc response payload size in megabytes (default: 160) [$BPROXY_RPC_MAX_RESPONSE_SIZE]
-   --rpc-peers urls [ --rpc-peers urls ]  list of urls with rpc peers to mirror the requests to [$BPROXY_RPC_PEERS]
-   --rpc-remove-backend-from-peers        remove rpc backend from peers (default: false) [$BPROXY_RPC_REMOVE_BACKEND_FROM_PEERS]
+   --rpc-backend url                                   url of backend rpc (default: "http://127.0.0.1:18545") [$BPROXY_RPC_BACKEND]
+   --rpc-enabled                                       enable rpc proxy (default: false) [$BPROXY_RPC_ENABLED]
+   --rpc-listen-address host:port                      host:port for rpc proxy (default: "0.0.0.0:8545") [$BPROXY_RPC_LISTEN_ADDRESS]
+   --rpc-log-requests                                  whether to log rpc requests (default: false) [$BPROXY_RPC_LOG_REQUESTS]
+   --rpc-log-responses                                 whether to log responses to proxied/mirrored rpc requests (default: false) [$BPROXY_RPC_LOG_RESPONSES]
+   --rpc-max-backend-connection-wait-timeout duration  maximum duration to wait for a free rpc backend connection (0s means don't wait) (default: 0s) [$BPROXY_RPC_MAX_BACKEND_CONNECTION_WAIT_TIMEOUT]
+   --rpc-max-backend-connections-per-host count        maximum connections count per rpc backend host (default: 512) [$BPROXY_RPC_MAX_BACKEND_CONNECTIONS_PER_HOST]
+   --rpc-max-client-connections-per-ip count           maximum rpc client tcp connections count per ip (0 means unlimited) (default: 0) [$BPROXY_RPC_MAX_CLIENT_CONNECTIONS_PER_IP]
+   --rpc-max-request-size megabytes                    maximum rpc request payload size in megabytes (default: 15) [$BPROXY_RPC_MAX_REQUEST_SIZE]
+   --rpc-max-response-size megabytes                   maximum rpc response payload size in megabytes (default: 160) [$BPROXY_RPC_MAX_RESPONSE_SIZE]
+   --rpc-peers urls [ --rpc-peers urls ]               list of urls with rpc peers to mirror the requests to [$BPROXY_RPC_PEERS]
+   --rpc-remove-backend-from-peers                     remove rpc backend from peers (default: false) [$BPROXY_RPC_REMOVE_BACKEND_FROM_PEERS]
 ```

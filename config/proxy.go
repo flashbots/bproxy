@@ -5,20 +5,24 @@ import (
 	"fmt"
 	"net"
 	"net/url"
+	"time"
 
 	"github.com/flashbots/bproxy/utils"
 )
 
 type Proxy struct {
-	Backend                string   `yaml:"backend"`
-	Enabled                bool     `yaml:"enabled"`
-	ListenAddress          string   `yaml:"listen_address"`
-	LogRequests            bool     `yaml:"log_requests"`
-	LogResponses           bool     `yaml:"log_responses"`
-	MaxRequestSize         int      `yaml:"max_request_size"`
-	MaxResponseSize        int      `yaml:"max_request_size"`
-	Peers                  []string `yaml:"peers"`
-	RemoveBackendFromPeers bool     `yaml:"remove_backend_from_peers"`
+	Backend                         string        `yaml:"backend"`
+	Enabled                         bool          `yaml:"enabled"`
+	ListenAddress                   string        `yaml:"listen_address"`
+	LogRequests                     bool          `yaml:"log_requests"`
+	LogResponses                    bool          `yaml:"log_responses"`
+	MaxBackendConnectionsPerHost    int           `yaml:"max_backend_connections_per_host"`
+	MaxBackendConnectionWaitTimeout time.Duration `yaml:"max_client_connection_wait_timeout"`
+	MaxClientConnectionsPerIP       int           `yaml:"max_client_connections_per_ip"`
+	MaxRequestSize                  int           `yaml:"max_request_size"`
+	MaxResponseSize                 int           `yaml:"max_request_size"`
+	Peers                           []string      `yaml:"peers"`
+	RemoveBackendFromPeers          bool          `yaml:"remove_backend_from_peers"`
 }
 
 var (

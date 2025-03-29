@@ -25,7 +25,7 @@ func CommandServe(cfg *config.Config) *cli.Command {
 		peersFlag = &cli.StringSlice{}
 
 		flags = []cli.Flag{
-			&cli.StringFlag{ // backend
+			&cli.StringFlag{ // --xxx-backend
 				Category:    strings.ToUpper(category),
 				Destination: &cfg.Backend,
 				EnvVars:     []string{envPrefix + strings.ToUpper(category) + "_BACKEND"},
@@ -34,7 +34,7 @@ func CommandServe(cfg *config.Config) *cli.Command {
 				Value:       backend,
 			},
 
-			&cli.BoolFlag{ // enabled
+			&cli.BoolFlag{ // --xxx-enabled
 				Category:    strings.ToUpper(category),
 				Destination: &cfg.Enabled,
 				EnvVars:     []string{envPrefix + strings.ToUpper(category) + "_ENABLED"},
@@ -43,7 +43,7 @@ func CommandServe(cfg *config.Config) *cli.Command {
 				Value:       false,
 			},
 
-			&cli.StringFlag{ // listen-address
+			&cli.StringFlag{ // --xxx-listen-address
 				Category:    strings.ToUpper(category),
 				Destination: &cfg.ListenAddress,
 				EnvVars:     []string{envPrefix + strings.ToUpper(category) + "_LISTEN_ADDRESS"},
@@ -52,7 +52,7 @@ func CommandServe(cfg *config.Config) *cli.Command {
 				Value:       listenAddress,
 			},
 
-			&cli.BoolFlag{ // log-requests
+			&cli.BoolFlag{ // --xxx-log-requests
 				Category:    strings.ToUpper(category),
 				Destination: &cfg.LogRequests,
 				EnvVars:     []string{envPrefix + strings.ToUpper(category) + "_LOG_REQUESTS"},
@@ -61,7 +61,7 @@ func CommandServe(cfg *config.Config) *cli.Command {
 				Value:       false,
 			},
 
-			&cli.BoolFlag{ // log-responses
+			&cli.BoolFlag{ // --xxx-log-responses
 				Category:    strings.ToUpper(category),
 				Destination: &cfg.LogResponses,
 				EnvVars:     []string{envPrefix + strings.ToUpper(category) + "_LOG_RESPONSES"},
@@ -70,7 +70,34 @@ func CommandServe(cfg *config.Config) *cli.Command {
 				Value:       false,
 			},
 
-			&cli.IntFlag{ // max-request-size
+			&cli.DurationFlag{ // --xxx-max-backend-connection-wait-timeout
+				Category:    strings.ToUpper(category),
+				Destination: &cfg.MaxBackendConnectionWaitTimeout,
+				EnvVars:     []string{envPrefix + strings.ToUpper(category) + "_MAX_BACKEND_CONNECTION_WAIT_TIMEOUT"},
+				Name:        category + "-max-backend-connection-wait-timeout",
+				Usage:       "maximum `duration` to wait for a free " + category + " backend connection (0s means don't wait)",
+				Value:       0,
+			},
+
+			&cli.IntFlag{ // --xxx-max-backend-connections-per-host
+				Category:    strings.ToUpper(category),
+				Destination: &cfg.MaxBackendConnectionsPerHost,
+				EnvVars:     []string{envPrefix + strings.ToUpper(category) + "_MAX_BACKEND_CONNECTIONS_PER_HOST"},
+				Name:        category + "-max-backend-connections-per-host",
+				Usage:       "maximum connections `count` per " + category + " backend host",
+				Value:       512,
+			},
+
+			&cli.IntFlag{ // --xxx-max-client-connections-per-ip
+				Category:    strings.ToUpper(category),
+				Destination: &cfg.MaxClientConnectionsPerIP,
+				EnvVars:     []string{envPrefix + strings.ToUpper(category) + "_MAX_CLIENT_CONNECTIONS_PER_IP"},
+				Name:        category + "-max-client-connections-per-ip",
+				Usage:       "maximum " + category + " client tcp connections `count` per ip (0 means unlimited)",
+				Value:       0,
+			},
+
+			&cli.IntFlag{ // --xxx-max-request-size
 				Category:    strings.ToUpper(category),
 				Destination: &cfg.MaxRequestSize,
 				EnvVars:     []string{envPrefix + strings.ToUpper(category) + "_MAX_REQUEST_SIZE"},
@@ -79,7 +106,7 @@ func CommandServe(cfg *config.Config) *cli.Command {
 				Value:       15,
 			},
 
-			&cli.IntFlag{ // max-response-size
+			&cli.IntFlag{ // --xxx-max-response-size
 				Category:    strings.ToUpper(category),
 				Destination: &cfg.MaxResponseSize,
 				EnvVars:     []string{envPrefix + strings.ToUpper(category) + "_MAX_RESPONSE_SIZE"},
@@ -88,7 +115,7 @@ func CommandServe(cfg *config.Config) *cli.Command {
 				Value:       160,
 			},
 
-			&cli.StringSliceFlag{ // peers
+			&cli.StringSliceFlag{ // --xxx-peers
 				Category:    strings.ToUpper(category),
 				Destination: peersFlag,
 				EnvVars:     []string{envPrefix + strings.ToUpper(category) + "_PEERS"},
@@ -96,7 +123,7 @@ func CommandServe(cfg *config.Config) *cli.Command {
 				Usage:       "list of `urls` with " + category + " peers to mirror the requests to",
 			},
 
-			&cli.BoolFlag{ // remove-backend-from-peers
+			&cli.BoolFlag{ // --xxx-remove-backend-from-peers
 				Category:    strings.ToUpper(category),
 				Destination: &cfg.RemoveBackendFromPeers,
 				EnvVars:     []string{envPrefix + strings.ToUpper(category) + "_REMOVE_BACKEND_FROM_PEERS"},
@@ -113,8 +140,8 @@ func CommandServe(cfg *config.Config) *cli.Command {
 		cfg.AuthRpcProxy, categoryAuthRPC, "http://127.0.0.1:18551", "0.0.0.0:8551",
 	)
 
-	chaosFlags := []cli.Flag{
-		&cli.BoolFlag{
+	chaosFlags := []cli.Flag{ // chaos
+		&cli.BoolFlag{ // --chaos-enabled
 			Category:    strings.ToUpper(categoryChaos),
 			Destination: &cfg.Chaos.Enabled,
 			EnvVars:     []string{envPrefix + strings.ToUpper(categoryChaos) + "_ENABLED"},
@@ -123,7 +150,7 @@ func CommandServe(cfg *config.Config) *cli.Command {
 			Value:       false,
 		},
 
-		&cli.Float64Flag{
+		&cli.Float64Flag{ // --chaos-injected-http-error-probability
 			Category:    strings.ToUpper(categoryChaos),
 			Destination: &cfg.Chaos.InjectedHttpErrorProbability,
 			EnvVars:     []string{envPrefix + strings.ToUpper(categoryChaos) + "_INJECTED_HTTP_ERROR_PROBABILITY"},
@@ -132,7 +159,7 @@ func CommandServe(cfg *config.Config) *cli.Command {
 			Value:       20,
 		},
 
-		&cli.Float64Flag{
+		&cli.Float64Flag{ // --chaos-injected-jrpc-error-probability
 			Category:    strings.ToUpper(categoryChaos),
 			Destination: &cfg.Chaos.InjectedJrpcErrorProbability,
 			EnvVars:     []string{envPrefix + strings.ToUpper(categoryChaos) + "_INJECTED_JRPC_ERROR_PROBABILITY"},
@@ -141,7 +168,7 @@ func CommandServe(cfg *config.Config) *cli.Command {
 			Value:       20,
 		},
 
-		&cli.Float64Flag{
+		&cli.Float64Flag{ // --chaos-injected-invalid-jrpc-response-probability
 			Category:    strings.ToUpper(categoryChaos),
 			Destination: &cfg.Chaos.InjectedInvalidJrpcResponseProbability,
 			EnvVars:     []string{envPrefix + strings.ToUpper(categoryChaos) + "_INJECTED_INVALID_JRPC_RESPONSE_PROBABILITY"},
@@ -150,7 +177,7 @@ func CommandServe(cfg *config.Config) *cli.Command {
 			Value:       20,
 		},
 
-		&cli.DurationFlag{
+		&cli.DurationFlag{ // --chaos-min-injected-latency
 			Category:    strings.ToUpper(categoryChaos),
 			Destination: &cfg.Chaos.MinInjectedLatency,
 			EnvVars:     []string{envPrefix + strings.ToUpper(categoryChaos) + "_MIN_INJECTED_LATENCY"},
@@ -159,7 +186,7 @@ func CommandServe(cfg *config.Config) *cli.Command {
 			Value:       50 * time.Millisecond,
 		},
 
-		&cli.DurationFlag{
+		&cli.DurationFlag{ // --chaos-max-injected-latency
 			Category:    strings.ToUpper(categoryChaos),
 			Destination: &cfg.Chaos.MaxInjectedLatency,
 			EnvVars:     []string{envPrefix + strings.ToUpper(categoryChaos) + "_MAX_INJECTED_LATENCY"},
@@ -172,8 +199,8 @@ func CommandServe(cfg *config.Config) *cli.Command {
 		cfg.RpcProxy, categoryRPC, "http://127.0.0.1:18545", "0.0.0.0:8545",
 	)
 
-	metricsFlags := []cli.Flag{
-		&cli.StringFlag{
+	metricsFlags := []cli.Flag{ // metrics
+		&cli.StringFlag{ // --metrics-listen-address
 			Category:    strings.ToUpper(categoryMetrics),
 			Destination: &cfg.Metrics.ListenAddress,
 			EnvVars:     []string{envPrefix + strings.ToUpper(categoryMetrics) + "_LISTEN_ADDRESS"},
