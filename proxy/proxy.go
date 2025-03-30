@@ -14,6 +14,7 @@ import (
 
 	"github.com/flashbots/bproxy/logutils"
 	"github.com/flashbots/bproxy/metrics"
+	"github.com/flashbots/bproxy/types"
 
 	"github.com/valyala/fasthttp"
 	"go.opentelemetry.io/otel/attribute"
@@ -29,6 +30,13 @@ type Proxy struct {
 
 	backendURI *fasthttp.URI
 	peerURIs   []*fasthttp.URI
+
+	healthcheck         *fasthttp.Client
+	healthcheckURI      *fasthttp.URI
+	healthcheckTicker   *time.Ticker
+	healthcheckStatuses *types.RingBuffer[bool]
+	healthcheckDepth    int
+	isHealthy           bool
 
 	logger *zap.Logger
 
@@ -59,7 +67,7 @@ func newProxy(cfg *Config) (*Proxy, error) {
 		IdleTimeout:        30 * time.Second,
 		Logger:             logutils.FasthttpLogger(l),
 		MaxConnsPerIP:      cfg.Proxy.MaxClientConnectionsPerIP,
-		MaxRequestBodySize: cfg.Proxy.MaxRequestSize * 1024 * 1024,
+		MaxRequestBodySize: cfg.Proxy.MaxRequestSizeMb * 1024 * 1024,
 		Name:               cfg.Name,
 		ReadTimeout:        5 * time.Second,
 		WriteTimeout:       5 * time.Second,
@@ -69,29 +77,62 @@ func newProxy(cfg *Config) (*Proxy, error) {
 		MaxConnsPerHost:     cfg.Proxy.MaxBackendConnectionsPerHost,
 		MaxConnWaitTimeout:  cfg.Proxy.MaxBackendConnectionWaitTimeout,
 		MaxIdleConnDuration: 30 * time.Second,
-		MaxResponseBodySize: cfg.Proxy.MaxResponseSize * 1024 * 1024,
+		MaxResponseBodySize: cfg.Proxy.MaxResponseSizeMb * 1024 * 1024,
 		Name:                cfg.Name,
 		ReadTimeout:         5 * time.Second,
 		WriteTimeout:        5 * time.Second,
 	}
 
 	p.backendURI = fasthttp.AcquireURI()
-	if err := p.backendURI.Parse(nil, []byte(cfg.Proxy.Backend)); err != nil {
+	if err := p.backendURI.Parse(nil, []byte(cfg.Proxy.BackendURL)); err != nil {
 		fasthttp.ReleaseURI(p.backendURI)
 		return nil, err
 	}
 
-	p.peerURIs = make([]*fasthttp.URI, 0, len(cfg.Proxy.Peers))
-	for _, peerURI := range cfg.Proxy.Peers {
-		uri := fasthttp.AcquireURI()
-		if err := uri.Parse(nil, []byte(peerURI)); err != nil {
+	p.peerURIs = make([]*fasthttp.URI, 0, len(cfg.Proxy.PeerURLs))
+	for _, peerURL := range cfg.Proxy.PeerURLs {
+		peerURI := fasthttp.AcquireURI()
+		if err := peerURI.Parse(nil, []byte(peerURL)); err != nil {
 			fasthttp.ReleaseURI(p.backendURI)
 			for _, uri := range p.peerURIs {
 				fasthttp.ReleaseURI(uri)
 			}
 			return nil, err
 		}
-		p.peerURIs = append(p.peerURIs, uri)
+		p.peerURIs = append(p.peerURIs, peerURI)
+	}
+
+	if cfg.Proxy.HealthcheckURL != "" {
+		p.healthcheckURI = fasthttp.AcquireURI()
+		if err := p.healthcheckURI.Parse(nil, []byte(cfg.Proxy.HealthcheckURL)); err != nil {
+			fasthttp.ReleaseURI(p.backendURI)
+			for _, uri := range p.peerURIs {
+				fasthttp.ReleaseURI(uri)
+			}
+			fasthttp.ReleaseURI(p.healthcheckURI)
+			return nil, err
+		}
+
+		p.healthcheck = &fasthttp.Client{
+			MaxConnsPerHost:     1,
+			MaxConnWaitTimeout:  cfg.Proxy.HealthcheckInterval / 2,
+			MaxIdleConnDuration: 2 * cfg.Proxy.HealthcheckInterval,
+			MaxResponseBodySize: 4096,
+			Name:                cfg.Name + "-healthcheck",
+			ReadTimeout:         cfg.Proxy.HealthcheckInterval / 2,
+			WriteTimeout:        cfg.Proxy.HealthcheckInterval / 2,
+		}
+
+		p.healthcheckTicker = time.NewTicker(cfg.Proxy.HealthcheckInterval)
+
+		p.healthcheckDepth = max(
+			p.cfg.Proxy.HealthcheckThresholdHealthy,
+			p.cfg.Proxy.HealthcheckThresholdUnhealthy,
+		)
+
+		p.healthcheckStatuses = types.NewRingBuffer[bool](p.healthcheckDepth)
+
+		p.isHealthy = true
 	}
 
 	return p, nil
@@ -111,14 +152,22 @@ func (p *Proxy) Run(ctx context.Context, failure chan<- error) {
 	go func() { // run the authrpc proxy
 		l.Info("Proxy is going up...",
 			zap.String("listen_address", p.cfg.Proxy.ListenAddress),
-			zap.String("backend", p.cfg.Proxy.Backend),
-			zap.Strings("peers", p.cfg.Proxy.Peers),
+			zap.String("backend", p.cfg.Proxy.BackendURL),
+			zap.Strings("peers", p.cfg.Proxy.PeerURLs),
 		)
 		if err := p.frontend.ListenAndServe(p.cfg.Proxy.ListenAddress); err != nil {
 			failure <- err
 		}
 		l.Info("Proxy is down")
 	}()
+
+	if p.cfg.Proxy.HealthcheckURL != "" {
+		go func() {
+			for {
+				p.backendHealthcheck(ctx, <-p.healthcheckTicker.C)
+			}
+		}()
+	}
 }
 
 func (p *Proxy) Stop(ctx context.Context) error {
@@ -128,6 +177,11 @@ func (p *Proxy) Stop(ctx context.Context) error {
 
 	if p.stop != nil {
 		p.stop()
+	}
+
+	if p.cfg.Proxy.HealthcheckURL != "" {
+		p.healthcheckTicker.Stop()
+		fasthttp.ReleaseURI(p.healthcheckURI)
 	}
 
 	res := p.frontend.ShutdownWithContext(ctx)
@@ -159,6 +213,13 @@ func (p *Proxy) ResetConnections() {
 	}
 }
 
+func (p *Proxy) Observe(ctx context.Context, o otelapi.Observer) error {
+	o.ObserveInt64(metrics.FrontendConnectionsCount, int64(p.frontend.GetOpenConnectionsCount()), otelapi.WithAttributes(
+		attribute.KeyValue{Key: "proxy", Value: attribute.StringValue(p.cfg.Name)},
+	))
+	return nil
+}
+
 func (p *Proxy) defaultTriage(body []byte) *triagedRequest {
 	return &triagedRequest{}
 }
@@ -183,6 +244,7 @@ func (p *Proxy) handle(ctx *fasthttp.RequestCtx) {
 		defer fasthttp.ReleaseRequest(req)
 
 		ctx.Request.CopyTo(req)
+		req.SetTimeout(p.cfg.Proxy.BackendTimeout)
 		req.SetURI(p.backendURI)
 		req.Header.Add("x-forwarded-for", ctx.RemoteIP().String())
 		req.Header.Add("x-forwarded-host", str(ctx.Host()))
@@ -232,7 +294,7 @@ func (p *Proxy) handle(ctx *fasthttp.RequestCtx) {
 		defer fasthttp.ReleaseResponse(res)
 
 		loggedFields = append(loggedFields,
-			zap.Time("tx_request_received", tsReqReceived),
+			zap.Time("ts_request_received", tsReqReceived),
 			zap.Bool("proxy", call.proxy),
 			zap.Bool("mirror", call.mirror),
 			zap.Uint64("connection_id", ctx.ConnID()),
@@ -336,7 +398,7 @@ func (p *Proxy) handle(ctx *fasthttp.RequestCtx) {
 					}
 
 				case "gzip":
-					if body, err := unzip(bytes.NewBuffer(res.Body())); err == nil {
+					if body, err := res.BodyGunzip(); err == nil {
 						var jsonResponse interface{}
 						if err := json.Unmarshal(body, &jsonResponse); err == nil {
 							loggedFields = append(loggedFields,
@@ -573,9 +635,75 @@ func (p *Proxy) upstreamConnectionChanged(conn net.Conn, state fasthttp.ConnStat
 	}
 }
 
-func (p *Proxy) Observe(ctx context.Context, o otelapi.Observer) error {
-	o.ObserveInt64(metrics.FrontendConnectionsCount, int64(p.frontend.GetOpenConnectionsCount()), otelapi.WithAttributes(
-		attribute.KeyValue{Key: "proxy", Value: attribute.StringValue(p.cfg.Name)},
-	))
-	return nil
+func (p *Proxy) connectionsCount() int {
+	p.mxConnections.Lock()
+	defer p.mxConnections.Unlock()
+
+	return len(p.connections)
+}
+
+func (p *Proxy) backendHealthcheck(ctx context.Context, _ time.Time) {
+	l := logutils.LoggerFromContext(ctx)
+
+	req := fasthttp.AcquireRequest()
+	defer fasthttp.ReleaseRequest(req)
+
+	res := fasthttp.AcquireResponse()
+	defer fasthttp.ReleaseResponse(res)
+
+	req.SetURI(p.healthcheckURI)
+	req.Header.SetMethod("GET")
+	req.SetTimeout(p.cfg.Proxy.HealthcheckInterval / 2)
+
+	if err := p.backend.Do(req, res); err == nil {
+		switch res.StatusCode() {
+		case fasthttp.StatusOK, fasthttp.StatusAccepted:
+			p.healthcheckStatuses.Push(true)
+		default:
+			p.healthcheckStatuses.Push(false)
+		}
+	} else {
+		l.Warn("Failed to query the healthcheck endpoint",
+			zap.Error(err),
+			zap.String("proxy", p.cfg.Name),
+		)
+		p.healthcheckStatuses.Push(false)
+	}
+
+	if p.healthcheckStatuses.Length() > p.healthcheckDepth {
+		_, _ = p.healthcheckStatuses.Pop()
+	}
+
+	isHealthy := true
+	for idx := p.healthcheckDepth - 1; idx >= p.healthcheckDepth-p.cfg.Proxy.HealthcheckThresholdHealthy; idx-- {
+		if s, ok := p.healthcheckStatuses.At(idx); ok {
+			isHealthy = isHealthy && s
+		}
+	}
+
+	isUnhealthy := true
+	for idx := p.healthcheckDepth - 1; idx >= p.healthcheckDepth-p.cfg.Proxy.HealthcheckThresholdUnhealthy; idx-- {
+		if s, ok := p.healthcheckStatuses.At(idx); ok {
+			isUnhealthy = isUnhealthy && !s
+		}
+	}
+
+	if p.isHealthy && isUnhealthy {
+		p.isHealthy = false
+		l.Info("Backend became unhealthy",
+			zap.String("proxy", p.cfg.Name),
+		)
+	} else if !p.isHealthy && isHealthy {
+		p.isHealthy = true
+		l.Info("Backend is healthy again",
+			zap.String("proxy", p.cfg.Name),
+		)
+	}
+
+	if !p.isHealthy && p.connectionsCount() > 0 {
+		l.Warn("Resetting frontend connections b/c backend is (still) unhealthy...",
+			zap.String("proxy", p.cfg.Name),
+		)
+		p.ResetConnections()
+	}
 }

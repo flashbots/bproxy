@@ -12,8 +12,13 @@ bproxy serve [command options]
 OPTIONS:
    AUTHRPC
 
-   --authrpc-backend url                                   url of backend authrpc (default: "http://127.0.0.1:18551") [$BPROXY_AUTHRPC_BACKEND]
+   --authrpc-backend url                                   url of authrpc backend (default: "http://127.0.0.1:18551") [$BPROXY_AUTHRPC_BACKEND]
+   --authrpc-backend-timeout duration                      max duration for authrpc backend requests (default: 1s) [$BPROXY_AUTHRPC_BACKEND_TIMEOUT]
    --authrpc-enabled                                       enable authrpc proxy (default: false) [$BPROXY_AUTHRPC_ENABLED]
+   --authrpc-healthcheck url                               url of authrpc backend healthcheck endpoint (default: disabled) [$BPROXY_AUTHRPC_HEALTHCHECK]
+   --authrpc-healthcheck-interval interval                 interval between consecutive authrpc backend healthchecks (default: 1s) [$BPROXY_AUTHRPC_HEALTHCHECK_INTERVAL]
+   --authrpc-healthcheck-threshold-healthy count           count of consecutive successful healthchecks to consider authrpc backend to be healthy (default: 2) [$BPROXY_AUTHRPC_HEALTHCHECK_THRESHOLD_HEALTHY]
+   --authrpc-healthcheck-threshold-unhealthy count         count of consecutive failed healthchecks to consider authrpc backend to be unhealthy (default: 2) [$BPROXY_AUTHRPC_HEALTHCHECK_THRESHOLD_UNHEALTHY]
    --authrpc-listen-address host:port                      host:port for authrpc proxy (default: "0.0.0.0:8551") [$BPROXY_AUTHRPC_LISTEN_ADDRESS]
    --authrpc-log-requests                                  whether to log authrpc requests (default: false) [$BPROXY_AUTHRPC_LOG_REQUESTS]
    --authrpc-log-responses                                 whether to log responses to proxied/mirrored authrpc requests (default: false) [$BPROXY_AUTHRPC_LOG_RESPONSES]
@@ -22,7 +27,7 @@ OPTIONS:
    --authrpc-max-client-connections-per-ip count           maximum authrpc client tcp connections count per ip (0 means unlimited) (default: 0) [$BPROXY_AUTHRPC_MAX_CLIENT_CONNECTIONS_PER_IP]
    --authrpc-max-request-size megabytes                    maximum authrpc request payload size in megabytes (default: 15) [$BPROXY_AUTHRPC_MAX_REQUEST_SIZE]
    --authrpc-max-response-size megabytes                   maximum authrpc response payload size in megabytes (default: 160) [$BPROXY_AUTHRPC_MAX_RESPONSE_SIZE]
-   --authrpc-peers urls [ --authrpc-peers urls ]           list of urls with authrpc peers to mirror the requests to [$BPROXY_AUTHRPC_PEERS]
+   --authrpc-peers urls [ --authrpc-peers urls ]           list of authrpc peers urls to mirror the requests to [$BPROXY_AUTHRPC_PEERS]
    --authrpc-remove-backend-from-peers                     remove authrpc backend from peers (default: false) [$BPROXY_AUTHRPC_REMOVE_BACKEND_FROM_PEERS]
 
    CHAOS
@@ -40,8 +45,13 @@ OPTIONS:
 
    RPC
 
-   --rpc-backend url                                   url of backend rpc (default: "http://127.0.0.1:18545") [$BPROXY_RPC_BACKEND]
+   --rpc-backend url                                   url of rpc backend (default: "http://127.0.0.1:18545") [$BPROXY_RPC_BACKEND]
+   --rpc-backend-timeout duration                      max duration for rpc backend requests (default: 1s) [$BPROXY_RPC_BACKEND_TIMEOUT]
    --rpc-enabled                                       enable rpc proxy (default: false) [$BPROXY_RPC_ENABLED]
+   --rpc-healthcheck url                               url of rpc backend healthcheck endpoint (default: disabled) [$BPROXY_RPC_HEALTHCHECK]
+   --rpc-healthcheck-interval interval                 interval between consecutive rpc backend healthchecks (default: 1s) [$BPROXY_RPC_HEALTHCHECK_INTERVAL]
+   --rpc-healthcheck-threshold-healthy count           count of consecutive successful healthchecks to consider rpc backend to be healthy (default: 2) [$BPROXY_RPC_HEALTHCHECK_THRESHOLD_HEALTHY]
+   --rpc-healthcheck-threshold-unhealthy count         count of consecutive failed healthchecks to consider rpc backend to be unhealthy (default: 2) [$BPROXY_RPC_HEALTHCHECK_THRESHOLD_UNHEALTHY]
    --rpc-listen-address host:port                      host:port for rpc proxy (default: "0.0.0.0:8545") [$BPROXY_RPC_LISTEN_ADDRESS]
    --rpc-log-requests                                  whether to log rpc requests (default: false) [$BPROXY_RPC_LOG_REQUESTS]
    --rpc-log-responses                                 whether to log responses to proxied/mirrored rpc requests (default: false) [$BPROXY_RPC_LOG_RESPONSES]
@@ -50,6 +60,6 @@ OPTIONS:
    --rpc-max-client-connections-per-ip count           maximum rpc client tcp connections count per ip (0 means unlimited) (default: 0) [$BPROXY_RPC_MAX_CLIENT_CONNECTIONS_PER_IP]
    --rpc-max-request-size megabytes                    maximum rpc request payload size in megabytes (default: 15) [$BPROXY_RPC_MAX_REQUEST_SIZE]
    --rpc-max-response-size megabytes                   maximum rpc response payload size in megabytes (default: 160) [$BPROXY_RPC_MAX_RESPONSE_SIZE]
-   --rpc-peers urls [ --rpc-peers urls ]               list of urls with rpc peers to mirror the requests to [$BPROXY_RPC_PEERS]
+   --rpc-peers urls [ --rpc-peers urls ]               list of rpc peers urls to mirror the requests to [$BPROXY_RPC_PEERS]
    --rpc-remove-backend-from-peers                     remove rpc backend from peers (default: false) [$BPROXY_RPC_REMOVE_BACKEND_FROM_PEERS]
 ```

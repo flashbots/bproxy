@@ -20,18 +20,27 @@ const (
 
 func CommandServe(cfg *config.Config) *cli.Command {
 	proxyFlags := func(
-		cfg *config.Proxy, category string, backend, listenAddress string,
-	) (flags []cli.Flag, peersFlag *cli.StringSlice) {
-		peersFlag = &cli.StringSlice{}
+		cfg *config.Proxy, category string, backendURL, listenAddress string,
+	) (flags []cli.Flag, peerURLsFlag *cli.StringSlice) {
+		peerURLsFlag = &cli.StringSlice{}
 
 		flags = []cli.Flag{
 			&cli.StringFlag{ // --xxx-backend
 				Category:    strings.ToUpper(category),
-				Destination: &cfg.Backend,
+				Destination: &cfg.BackendURL,
 				EnvVars:     []string{envPrefix + strings.ToUpper(category) + "_BACKEND"},
 				Name:        category + "-backend",
-				Usage:       "`url` of backend " + category,
-				Value:       backend,
+				Usage:       "`url` of " + category + " backend",
+				Value:       backendURL,
+			},
+
+			&cli.DurationFlag{ // --xxx-backend-timeout
+				Category:    strings.ToUpper(category),
+				Destination: &cfg.BackendTimeout,
+				EnvVars:     []string{envPrefix + strings.ToUpper(category) + "_BACKEND_TIMEOUT"},
+				Name:        category + "-backend-timeout",
+				Usage:       "max `duration` for " + category + " backend requests",
+				Value:       time.Second,
 			},
 
 			&cli.BoolFlag{ // --xxx-enabled
@@ -41,6 +50,43 @@ func CommandServe(cfg *config.Config) *cli.Command {
 				Name:        category + "-enabled",
 				Usage:       "enable " + category + " proxy",
 				Value:       false,
+			},
+
+			&cli.StringFlag{ // --xxx-healthcheck
+				Category:    strings.ToUpper(category),
+				DefaultText: "disabled",
+				Destination: &cfg.HealthcheckURL,
+				EnvVars:     []string{envPrefix + strings.ToUpper(category) + "_HEALTHCHECK"},
+				Name:        category + "-healthcheck",
+				Usage:       "`url` of " + category + " backend healthcheck endpoint",
+				Value:       "",
+			},
+
+			&cli.DurationFlag{ // --xxx-healthcheck-interval
+				Category:    strings.ToUpper(category),
+				Destination: &cfg.HealthcheckInterval,
+				EnvVars:     []string{envPrefix + strings.ToUpper(category) + "_HEALTHCHECK_INTERVAL"},
+				Name:        category + "-healthcheck-interval",
+				Usage:       "`interval` between consecutive " + category + " backend healthchecks",
+				Value:       time.Second,
+			},
+
+			&cli.IntFlag{ // --xxx-healthcheck-threshold-healthy
+				Category:    strings.ToUpper(category),
+				Destination: &cfg.HealthcheckThresholdHealthy,
+				EnvVars:     []string{envPrefix + strings.ToUpper(category) + "_HEALTHCHECK_THRESHOLD_HEALTHY"},
+				Name:        category + "-healthcheck-threshold-healthy",
+				Usage:       "`count` of consecutive successful healthchecks to consider " + category + " backend to be healthy",
+				Value:       2,
+			},
+
+			&cli.IntFlag{ // --xxx-healthcheck-threshold-unhealthy
+				Category:    strings.ToUpper(category),
+				Destination: &cfg.HealthcheckThresholdUnhealthy,
+				EnvVars:     []string{envPrefix + strings.ToUpper(category) + "_HEALTHCHECK_THRESHOLD_UNHEALTHY"},
+				Name:        category + "-healthcheck-threshold-unhealthy",
+				Usage:       "`count` of consecutive failed healthchecks to consider " + category + " backend to be unhealthy",
+				Value:       2,
 			},
 
 			&cli.StringFlag{ // --xxx-listen-address
@@ -99,7 +145,7 @@ func CommandServe(cfg *config.Config) *cli.Command {
 
 			&cli.IntFlag{ // --xxx-max-request-size
 				Category:    strings.ToUpper(category),
-				Destination: &cfg.MaxRequestSize,
+				Destination: &cfg.MaxRequestSizeMb,
 				EnvVars:     []string{envPrefix + strings.ToUpper(category) + "_MAX_REQUEST_SIZE"},
 				Name:        category + "-max-request-size",
 				Usage:       "maximum " + category + " request payload size in `megabytes`",
@@ -108,7 +154,7 @@ func CommandServe(cfg *config.Config) *cli.Command {
 
 			&cli.IntFlag{ // --xxx-max-response-size
 				Category:    strings.ToUpper(category),
-				Destination: &cfg.MaxResponseSize,
+				Destination: &cfg.MaxResponseSizeMb,
 				EnvVars:     []string{envPrefix + strings.ToUpper(category) + "_MAX_RESPONSE_SIZE"},
 				Name:        category + "-max-response-size",
 				Usage:       "maximum " + category + " response payload size in `megabytes`",
@@ -117,10 +163,10 @@ func CommandServe(cfg *config.Config) *cli.Command {
 
 			&cli.StringSliceFlag{ // --xxx-peers
 				Category:    strings.ToUpper(category),
-				Destination: peersFlag,
+				Destination: peerURLsFlag,
 				EnvVars:     []string{envPrefix + strings.ToUpper(category) + "_PEERS"},
 				Name:        category + "-peers",
-				Usage:       "list of `urls` with " + category + " peers to mirror the requests to",
+				Usage:       "list of " + category + " peers `urls` to mirror the requests to",
 			},
 
 			&cli.BoolFlag{ // --xxx-remove-backend-from-peers
@@ -136,7 +182,7 @@ func CommandServe(cfg *config.Config) *cli.Command {
 		return
 	}
 
-	authrpcFlags, peersAuthRPC := proxyFlags(
+	authrpcFlags, peerURLsAuthRPC := proxyFlags(
 		cfg.AuthRpcProxy, categoryAuthRPC, "http://127.0.0.1:18551", "0.0.0.0:8551",
 	)
 
@@ -195,7 +241,7 @@ func CommandServe(cfg *config.Config) *cli.Command {
 		},
 	}
 
-	rpcFlags, peersRPC := proxyFlags(
+	rpcFlags, peerURLsRPC := proxyFlags(
 		cfg.RpcProxy, categoryRPC, "http://127.0.0.1:18545", "0.0.0.0:8545",
 	)
 
@@ -223,8 +269,8 @@ func CommandServe(cfg *config.Config) *cli.Command {
 		Flags: flags,
 
 		Before: func(_ *cli.Context) error {
-			cfg.AuthRpcProxy.Peers = peersAuthRPC.Value()
-			cfg.RpcProxy.Peers = peersRPC.Value()
+			cfg.AuthRpcProxy.PeerURLs = peerURLsAuthRPC.Value()
+			cfg.RpcProxy.PeerURLs = peerURLsRPC.Value()
 
 			return cfg.Validate()
 		},
