@@ -233,8 +233,8 @@ func (cfg *Proxy) Validate() error {
 				errProxyInvalidMaxRequestSize, cfg.MaxRequestSizeMb,
 			))
 		}
-		if cfg.MaxRequestSizeMb > 1024 {
-			errs = append(errs, fmt.Errorf("%w: too high, must be <=1024: %d",
+		if cfg.MaxRequestSizeMb > 4096 {
+			errs = append(errs, fmt.Errorf("%w: too high, must be <=4096: %d",
 				errProxyInvalidMaxRequestSize, cfg.MaxRequestSizeMb,
 			))
 		}
@@ -246,8 +246,8 @@ func (cfg *Proxy) Validate() error {
 				errProxyInvalidMaxResponseSize, cfg.MaxResponseSizeMb,
 			))
 		}
-		if cfg.MaxResponseSizeMb > 1024 {
-			errs = append(errs, fmt.Errorf("%w: too high, must be <=1024: %d",
+		if cfg.MaxResponseSizeMb > 4096 {
+			errs = append(errs, fmt.Errorf("%w: too high, must be <=4096: %d",
 				errProxyInvalidMaxResponseSize, cfg.MaxResponseSizeMb,
 			))
 		}
