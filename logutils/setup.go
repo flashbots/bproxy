@@ -20,19 +20,20 @@ var (
 func NewLogger(cfg *config.Log) (
 	*zap.Logger, error,
 ) {
-	var config zap.Config
+	var lconfig zap.Config
 	switch strings.ToLower(cfg.Mode) {
 	case "dev":
-		config = zap.NewDevelopmentConfig()
-		config.EncoderConfig.EncodeCaller = nil
+		lconfig = zap.NewDevelopmentConfig()
+		lconfig.EncoderConfig.EncodeCaller = nil
 	case "prod":
-		config = zap.NewProductionConfig()
+		lconfig = zap.NewProductionConfig()
+		lconfig.Sampling = nil
 	default:
 		return nil, fmt.Errorf("%w: %s",
 			errLoggerInvalidMode, cfg.Mode,
 		)
 	}
-	config.EncoderConfig.EncodeTime = zapcore.ISO8601TimeEncoder
+	lconfig.EncoderConfig.EncodeTime = zapcore.ISO8601TimeEncoder
 
 	logLevel, err := zap.ParseAtomicLevel(cfg.Level)
 	if err != nil {
@@ -40,9 +41,9 @@ func NewLogger(cfg *config.Log) (
 			errLoggerInvalidLevel, cfg.Level, err,
 		)
 	}
-	config.Level = logLevel
+	lconfig.Level = logLevel
 
-	l, err := config.Build()
+	l, err := lconfig.Build()
 	if err != nil {
 		return nil, fmt.Errorf("%w: %w",
 			errLoggerFailedToBuild, err,
