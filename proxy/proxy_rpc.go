@@ -3,11 +3,10 @@ package proxy
 import (
 	"context"
 	"encoding/json"
+	"strings"
 
 	"github.com/flashbots/bproxy/types"
 	"go.uber.org/zap"
-
-	ethtypes "github.com/ethereum/go-ethereum/core/types"
 )
 
 type RpcProxy struct {
@@ -51,50 +50,118 @@ func (p *RpcProxy) Stop(ctx context.Context) error {
 }
 
 func (p *RpcProxy) triage(body []byte) *triagedRequest {
-	// proxy un-parse-able requests as-is, but don't mirror them
-	jrpc := types.JrpcCall{}
-	if err := json.Unmarshal(body, &jrpc); err != nil {
-		p.Proxy.logger.Warn("Failed to parse rpc call body",
-			zap.Error(err),
-		)
-		return &triagedRequest{
-			proxy: true,
-		}
-	}
+	errs := make([]error, 0)
 
+	singleShot := &types.JrpcCall{}
+	err := json.Unmarshal(body, singleShot)
+	if err == nil {
+		return p.triageSingle(singleShot)
+	}
+	errs = append(errs, err)
+
+	batch := []types.JrpcCall{}
+	err = json.Unmarshal(body, &batch)
+	if err == nil {
+		return p.triageBatch(batch)
+	}
+	errs = append(errs, err)
+
+	p.Proxy.logger.Warn("Failed to parse rpc call body",
+		zap.Errors("errors", errs),
+	)
+
+	// proxy un-parse-able requests as-is, but don't mirror them
+	return &triagedRequest{
+		proxy: true,
+	}
+}
+
+func (p *RpcProxy) triageSingle(call *types.JrpcCall) *triagedRequest {
 	// proxy all non sendRawTX calls, but don't mirror them
-	if jrpc.Method != "eth_sendRawTransaction" {
+	if call.Method != "eth_sendRawTransaction" {
 		return &triagedRequest{
 			proxy:      true,
-			jrpcMethod: jrpc.Method,
-			jrpcID:     jrpc.ID,
+			jrpcMethod: call.Method,
+			jrpcID:     call.ID,
 		}
 	}
 
 	res := &triagedRequest{
 		proxy:      true,
 		mirror:     true,
-		jrpcMethod: jrpc.Method,
-		jrpcID:     jrpc.ID,
+		jrpcMethod: call.Method,
+		jrpcID:     call.ID,
 	}
 
-	if tx, err := decodeTx(body); err == nil {
-		res.tx = &triagedRequestTx{
+	if from, tx, err := call.DecodeEthSendRawTransaction(); err == nil {
+		res.transactions = []triagedRequestTx{{
+			From:  &from,
 			To:    tx.To(),
 			Hash:  tx.Hash(),
 			Nonce: tx.Nonce(),
+		}}
+	} else {
+		p.Proxy.logger.Warn("Failed to decode eth_sendRawTransaction",
+			zap.Error(err),
+		)
+	}
+
+	return res
+}
+
+func (p *RpcProxy) triageBatch(batch []types.JrpcCall) *triagedRequest {
+	if len(batch) == 0 {
+		return &triagedRequest{} // no need to proxy empty batches
+	}
+
+	methodsSet := make(map[string]struct{}, 0)
+	for _, call := range batch {
+		if _, known := methodsSet[call.Method]; !known {
+			methodsSet[call.Method] = struct{}{}
 		}
-		if from, err := ethtypes.Sender(ethtypes.LatestSignerForChainID(tx.ChainId()), tx); err == nil {
-			res.tx.From = &from
+	}
+
+	methodsBuf := strings.Builder{}
+	for method := range methodsSet {
+		methodsBuf.WriteString(method)
+		methodsBuf.WriteRune(',')
+	}
+	methods := methodsBuf.String()
+	methods = methods[:len(methods)-1]
+
+	// proxy all non sendRawTX calls, but don't mirror them
+	if _, hasEthSendRawTx := methodsSet["eth_sendRawTransaction"]; !hasEthSendRawTx {
+		return &triagedRequest{
+			proxy:      true,
+			jrpcMethod: methods,
+			jrpcID:     batch[0].ID,
+		}
+	}
+
+	res := &triagedRequest{
+		proxy:        true,
+		mirror:       true,
+		jrpcMethod:   methods,
+		jrpcID:       batch[0].ID,
+		transactions: make([]triagedRequestTx, 0),
+	}
+
+	for _, call := range batch {
+		if call.Method != "eth_sendRawTransaction" {
+			continue
+		}
+		if from, tx, err := call.DecodeEthSendRawTransaction(); err == nil {
+			res.transactions = append(res.transactions, triagedRequestTx{
+				From:  &from,
+				To:    tx.To(),
+				Hash:  tx.Hash(),
+				Nonce: tx.Nonce(),
+			})
 		} else {
-			p.Proxy.logger.Warn("Failed to determine the sender for a transaction",
+			p.Proxy.logger.Warn("Failed to decode eth_sendRawTransaction",
 				zap.Error(err),
 			)
 		}
-	} else {
-		p.Proxy.logger.Warn("Failed to decode eth_sendRawTransaction hash",
-			zap.Error(err),
-		)
 	}
 
 	return res

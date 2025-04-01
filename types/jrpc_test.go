@@ -43,7 +43,7 @@ func TestUnmarshal(t *testing.T) {
 		b, err := os.ReadFile("./testdata/eth_sendRawTransaction.json")
 		assert.NoError(t, err)
 
-		call := types.EthSendRawTransaction{}
+		call := types.JrpcCall{}
 		err = json.Unmarshal(b, &call)
 		assert.NoError(t, err)
 

@@ -1,7 +1,6 @@
 package proxy
 
 import (
-	"bytes"
 	"context"
 	"encoding/hex"
 	"encoding/json"
@@ -304,21 +303,24 @@ func (p *Proxy) handle(ctx *fasthttp.RequestCtx) {
 			zap.Uint64("jrpc_id", call.jrpcID),
 		)
 
-		if call.tx != nil {
-			if call.tx.From != nil {
-				loggedFields = append(loggedFields,
-					zap.String("tx_from", call.tx.From.String()),
-				)
-			}
-			if call.tx.To != nil {
-				loggedFields = append(loggedFields,
-					zap.String("tx_to", call.tx.To.String()),
-				)
-			}
+		if len(call.transactions) > 0 {
 			loggedFields = append(loggedFields,
-				zap.Uint64("tx_nonce", call.tx.Nonce),
-				zap.String("tx_hash", call.tx.Hash.String()),
+				zap.Array("txs", call.transactions),
 			)
+			// if call.tx.From != nil {
+			// 	loggedFields = append(loggedFields,
+			// 		zap.String("tx_from", call.tx.From.String()),
+			// 	)
+			// }
+			// if call.tx.To != nil {
+			// 	loggedFields = append(loggedFields,
+			// 		zap.String("tx_to", call.tx.To.String()),
+			// 	)
+			// }
+			// loggedFields = append(loggedFields,
+			// 	zap.Uint64("tx_nonce", call.tx.Nonce),
+			// 	zap.String("tx_hash", call.tx.Hash.String()),
+			// )
 		}
 
 		l = p.logger.With(loggedFields...)
@@ -503,7 +505,7 @@ func (p *Proxy) handle(ctx *fasthttp.RequestCtx) {
 								}
 
 							case "gzip":
-								if body, err := unzip(bytes.NewBuffer(res.Body())); err == nil {
+								if body, err := res.BodyGunzip(); err == nil {
 									var jsonResponse interface{}
 									if err := json.Unmarshal(body, &jsonResponse); err == nil {
 										loggedFields = append(loggedFields,
