@@ -100,7 +100,16 @@ func (p *AuthrpcProxy) triage(body []byte) *triagedRequest {
 		}
 
 	case "engine_newPayloadV3":
-		// mirror & proxy all
+		// proxy & mirror
+		return &triagedRequest{
+			proxy:      true,
+			mirror:     true,
+			jrpcMethod: jrpc.Method,
+			jrpcID:     jrpc.ID,
+		}
+
+	case "miner_setMaxDASize":
+		// proxy & mirror
 		return &triagedRequest{
 			proxy:      true,
 			mirror:     true,
@@ -109,7 +118,7 @@ func (p *AuthrpcProxy) triage(body []byte) *triagedRequest {
 		}
 
 	case "engine_forkchoiceUpdatedV3":
-		{ // mirror and proxy FCUv3 with extra attributes, or FCUv3 we cant parse
+		{ // proxy & mirror FCUv3 with extra attributes (or FCUv3 we can't parse)
 			fcuv3 := types.EngineForkchoiceUpdatedV3{}
 			err := json.Unmarshal(body, &fcuv3)
 			if err != nil {
