@@ -8,7 +8,9 @@ import (
 	"time"
 
 	"github.com/flashbots/bproxy/types"
+
 	"github.com/valyala/fasthttp"
+	otelapi "go.opentelemetry.io/otel/metric"
 	"go.uber.org/zap"
 )
 
@@ -57,6 +59,13 @@ func (p *AuthrpcProxy) Stop(ctx context.Context) error {
 		return nil
 	}
 	return p.Proxy.Stop(ctx)
+}
+
+func (p *AuthrpcProxy) Observe(ctx context.Context, o otelapi.Observer) error {
+	if p == nil {
+		return nil
+	}
+	return p.Proxy.Observe(ctx, o)
 }
 
 func (p *AuthrpcProxy) run() {

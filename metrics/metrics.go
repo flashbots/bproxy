@@ -23,6 +23,8 @@ func Setup(
 ) error {
 	for _, setup := range []func(context.Context) error{
 		setupMeter, // must come first
+		setupRequestSize,
+		setupResponseSize,
 		setupProxySuccessCount,
 		setupProxyFailureCount,
 		setupProxyFakeCount,
@@ -66,6 +68,30 @@ func setupMeter(ctx context.Context) error {
 
 	meter = provider.Meter(metricsNamespace)
 
+	return nil
+}
+
+func setupRequestSize(ctx context.Context) error {
+	m, err := meter.Int64Histogram("request_size",
+		otelapi.WithDescription("sizes of incoming requests"),
+		otelapi.WithExplicitBucketBoundaries(0, 1, 16, 256, 4096, 65536, 1048576, 16777216, 268435456, 68719476736),
+	)
+	if err != nil {
+		return err
+	}
+	RequestSize = m
+	return nil
+}
+
+func setupResponseSize(ctx context.Context) error {
+	m, err := meter.Int64Histogram("response_size",
+		otelapi.WithDescription("sizes of sent responses"),
+		otelapi.WithExplicitBucketBoundaries(0, 1, 16, 256, 4096, 65536, 1048576, 16777216, 268435456, 68719476736),
+	)
+	if err != nil {
+		return err
+	}
+	ResponseSize = m
 	return nil
 }
 

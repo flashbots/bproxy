@@ -181,11 +181,11 @@ func (s *Server) Run() error {
 func (s *Server) observe(ctx context.Context, o otelapi.Observer) error {
 	errs := make([]error, 0, 2)
 
-	if err := s.authrpc.Proxy.Observe(ctx, o); err != nil {
+	if err := s.authrpc.Observe(ctx, o); err != nil {
 		errs = append(errs, err)
 	}
 
-	if err := s.rpc.Proxy.Observe(ctx, o); err != nil {
+	if err := s.rpc.Observe(ctx, o); err != nil {
 		errs = append(errs, err)
 	}
 

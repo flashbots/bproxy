@@ -5,6 +5,9 @@ import (
 )
 
 var (
+	RequestSize  otelapi.Int64Histogram
+	ResponseSize otelapi.Int64Histogram
+
 	ProxySuccessCount otelapi.Int64Counter
 	ProxyFailureCount otelapi.Int64Counter
 	ProxyFakeCount    otelapi.Int64Counter

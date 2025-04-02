@@ -213,9 +213,14 @@ func (p *Proxy) ResetConnections() {
 }
 
 func (p *Proxy) Observe(ctx context.Context, o otelapi.Observer) error {
+	if p == nil {
+		return nil
+	}
+
 	o.ObserveInt64(metrics.FrontendConnectionsCount, int64(p.frontend.GetOpenConnectionsCount()), otelapi.WithAttributes(
 		attribute.KeyValue{Key: "proxy", Value: attribute.StringValue(p.cfg.Name)},
 	))
+
 	return nil
 }
 
@@ -235,6 +240,11 @@ func (p *Proxy) handle(ctx *fasthttp.RequestCtx) {
 
 		proxy func(req *fasthttp.Request, res *fasthttp.Response) error
 	)
+
+	metrics.RequestSize.Record(context.TODO(), int64(ctx.Request.Header.ContentLength()), otelapi.WithAttributes(
+		attribute.KeyValue{Key: "proxy", Value: attribute.StringValue(p.cfg.Name)},
+		attribute.KeyValue{Key: "proxy", Value: attribute.StringValue(str(ctx.Request.Header.ContentEncoding()))},
+	))
 
 	call := p.triage(ctx.Request.Body())
 
@@ -307,20 +317,6 @@ func (p *Proxy) handle(ctx *fasthttp.RequestCtx) {
 			loggedFields = append(loggedFields,
 				zap.Array("txs", call.transactions),
 			)
-			// if call.tx.From != nil {
-			// 	loggedFields = append(loggedFields,
-			// 		zap.String("tx_from", call.tx.From.String()),
-			// 	)
-			// }
-			// if call.tx.To != nil {
-			// 	loggedFields = append(loggedFields,
-			// 		zap.String("tx_to", call.tx.To.String()),
-			// 	)
-			// }
-			// loggedFields = append(loggedFields,
-			// 	zap.Uint64("tx_nonce", call.tx.Nonce),
-			// 	zap.String("tx_hash", call.tx.Hash.String()),
-			// )
 		}
 
 		l = p.logger.With(loggedFields...)
@@ -338,6 +334,11 @@ func (p *Proxy) handle(ctx *fasthttp.RequestCtx) {
 		tsReqProxyStart := time.Now()
 		err := proxy(req, res)
 		tsReqProxyEnd := time.Now()
+
+		metrics.ResponseSize.Record(context.TODO(), int64(res.Header.ContentLength()), otelapi.WithAttributes(
+			attribute.KeyValue{Key: "proxy", Value: attribute.StringValue(p.cfg.Name)},
+			attribute.KeyValue{Key: "proxy", Value: attribute.StringValue(str(res.Header.ContentEncoding()))},
+		))
 
 		{ // add log fields
 			if p.cfg.Proxy.LogRequests {
@@ -368,7 +369,7 @@ func (p *Proxy) handle(ctx *fasthttp.RequestCtx) {
 			)
 
 			l.Error("Failed to proxy the request", loggedFields...)
-			metrics.ProxyFailureCount.Add(context.Background(), 1, metricAttributes)
+			metrics.ProxyFailureCount.Add(context.TODO(), 1, metricAttributes)
 
 			return
 		}
@@ -386,35 +387,30 @@ func (p *Proxy) handle(ctx *fasthttp.RequestCtx) {
 
 		{ // add log fields
 			if p.cfg.Proxy.LogResponses {
+				var body []byte
+
 				switch str(res.Header.ContentEncoding()) {
 				default:
+					body = res.Body()
+				case "gzip":
+					if body, err = res.BodyGunzip(); err != nil {
+						loggedFields = append(loggedFields,
+							zap.NamedError("error_gunzip", err),
+							zap.String("hex_response", hex.EncodeToString(res.Body())),
+						)
+					}
+				}
+
+				if body != nil {
 					var jsonResponse interface{}
-					if err := json.Unmarshal(res.Body(), &jsonResponse); err == nil {
+					if err := json.Unmarshal(body, &jsonResponse); err == nil {
 						loggedFields = append(loggedFields,
 							zap.Any("json_response", jsonResponse),
 						)
 					} else {
 						loggedFields = append(loggedFields,
-							zap.String("http_response", str(res.Body())),
-						)
-					}
-
-				case "gzip":
-					if body, err := res.BodyGunzip(); err == nil {
-						var jsonResponse interface{}
-						if err := json.Unmarshal(body, &jsonResponse); err == nil {
-							loggedFields = append(loggedFields,
-								zap.Any("json_response", jsonResponse),
-							)
-						} else {
-							loggedFields = append(loggedFields,
-								zap.String("http_response", str(body)),
-							)
-						}
-					} else {
-						loggedFields = append(loggedFields,
-							zap.NamedError("error_gzip", err),
-							zap.String("hex_response", hex.EncodeToString(res.Body())),
+							zap.NamedError("error_unmarshal", err),
+							zap.String("http_response", str(body)),
 						)
 					}
 				}
@@ -432,10 +428,10 @@ func (p *Proxy) handle(ctx *fasthttp.RequestCtx) {
 
 		if call.proxy {
 			l.Info("Proxied the request", loggedFields...)
-			metrics.ProxySuccessCount.Add(context.Background(), 1, metricAttributes)
+			metrics.ProxySuccessCount.Add(context.TODO(), 1, metricAttributes)
 		} else {
 			l.Info("Faked the request", loggedFields...)
-			metrics.ProxyFakeCount.Add(context.Background(), 1, metricAttributes)
+			metrics.ProxyFakeCount.Add(context.TODO(), 1, metricAttributes)
 		}
 	}()
 
@@ -527,14 +523,14 @@ func (p *Proxy) handle(ctx *fasthttp.RequestCtx) {
 					}
 
 					l.Info("Mirrored the request", loggedFields...)
-					metrics.MirrorSuccessCount.Add(context.Background(), 1, metricAttributes)
+					metrics.MirrorSuccessCount.Add(context.TODO(), 1, metricAttributes)
 				} else {
 					loggedFields = append(loggedFields,
 						zap.Error(err),
 					)
 
 					l.Error("Failed to mirror the request", loggedFields...)
-					metrics.MirrorFailureCount.Add(context.Background(), 1, metricAttributes)
+					metrics.MirrorFailureCount.Add(context.TODO(), 1, metricAttributes)
 				}
 
 				_ = l.Sync()

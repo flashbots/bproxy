@@ -6,6 +6,8 @@ import (
 	"strings"
 
 	"github.com/flashbots/bproxy/types"
+
+	otelapi "go.opentelemetry.io/otel/metric"
 	"go.uber.org/zap"
 )
 
@@ -47,6 +49,13 @@ func (p *RpcProxy) Stop(ctx context.Context) error {
 		return nil
 	}
 	return p.Proxy.Stop(ctx)
+}
+
+func (p *RpcProxy) Observe(ctx context.Context, o otelapi.Observer) error {
+	if p == nil {
+		return nil
+	}
+	return p.Proxy.Observe(ctx, o)
 }
 
 func (p *RpcProxy) triage(body []byte) *triagedRequest {
