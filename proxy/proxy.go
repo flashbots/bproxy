@@ -330,6 +330,7 @@ func (p *Proxy) handle(ctx *fasthttp.RequestCtx) {
 
 		var (
 			loggedFields = make([]zap.Field, 0, 12)
+			success      = true
 		)
 
 		tsReqProxyStart := time.Now()
@@ -362,23 +363,20 @@ func (p *Proxy) handle(ctx *fasthttp.RequestCtx) {
 		)
 
 		if err != nil {
+			success = false
+
 			switch str(req.Header.ContentType()) {
 			case "application/json":
-				ctx.SetStatusCode(fasthttp.StatusAccepted)
-				fmt.Fprintf(ctx, `{"jsonrpc":"2.0","error":{"code":-32042,"message":%s}`, strconv.Quote(err.Error()))
+				res.SetStatusCode(fasthttp.StatusAccepted)
+				res.SetBody([]byte(fmt.Sprintf(`{"jsonrpc":"2.0","error":{"code":-32042,"message":%s}`, strconv.Quote(err.Error()))))
 			default:
-				ctx.SetStatusCode(fasthttp.StatusBadGateway)
-				fmt.Fprint(ctx, err.Error())
+				res.SetBody([]byte(err.Error()))
+				res.SetStatusCode(fasthttp.StatusBadGateway)
 			}
 
 			loggedFields = append(loggedFields,
-				zap.Error(err),
+				zap.NamedError("error_backend", err),
 			)
-
-			l.Error("Failed to proxy the request", loggedFields...)
-			metrics.ProxyFailureCount.Add(context.TODO(), 1, metricAttributes)
-
-			return
 		}
 
 		if p.cfg.Chaos.Enabled { // chaos-inject latency
@@ -433,7 +431,10 @@ func (p *Proxy) handle(ctx *fasthttp.RequestCtx) {
 			)
 		}
 
-		if call.proxy {
+		if !success {
+			l.Error("Failed to proxy the request", loggedFields...)
+			metrics.ProxyFailureCount.Add(context.TODO(), 1, metricAttributes)
+		} else if call.proxy {
 			l.Info("Proxied the request", loggedFields...)
 			metrics.ProxySuccessCount.Add(context.TODO(), 1, metricAttributes)
 		} else {
