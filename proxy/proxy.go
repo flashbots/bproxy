@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"math/rand/v2"
 	"net"
+	"strconv"
 
 	"sync"
 	"time"
@@ -361,8 +362,14 @@ func (p *Proxy) handle(ctx *fasthttp.RequestCtx) {
 		)
 
 		if err != nil {
-			ctx.SetStatusCode(fasthttp.StatusBadGateway)
-			fmt.Fprint(ctx, err.Error())
+			switch str(req.Header.ContentType()) {
+			case "application/json":
+				ctx.SetStatusCode(fasthttp.StatusAccepted)
+				fmt.Fprintf(ctx, `{"jsonrpc":"2.0","error":{"code":-32042,"message":%s}`, strconv.Quote(err.Error()))
+			default:
+				ctx.SetStatusCode(fasthttp.StatusBadGateway)
+				fmt.Fprint(ctx, err.Error())
+			}
 
 			loggedFields = append(loggedFields,
 				zap.Error(err),
