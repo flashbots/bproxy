@@ -368,7 +368,7 @@ func (p *Proxy) handle(ctx *fasthttp.RequestCtx) {
 			switch str(req.Header.ContentType()) {
 			case "application/json":
 				res.SetStatusCode(fasthttp.StatusAccepted)
-				res.SetBody([]byte(fmt.Sprintf(`{"jsonrpc":"2.0","error":{"code":-32042,"message":%s}`, strconv.Quote(err.Error()))))
+				res.SetBody([]byte(fmt.Sprintf(`{"jsonrpc":"2.0","error":{"code":-32042,"message":%s}}`, strconv.Quote(err.Error()))))
 			default:
 				res.SetBody([]byte(err.Error()))
 				res.SetStatusCode(fasthttp.StatusBadGateway)
