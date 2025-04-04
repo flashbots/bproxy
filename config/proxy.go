@@ -2,10 +2,12 @@ package config
 
 import (
 	"crypto/tls"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"net"
 	"net/url"
+	"os"
 	"time"
 
 	"github.com/flashbots/bproxy/utils"
@@ -267,7 +269,7 @@ func (cfg *Proxy) Validate() error {
 				errs = append(errs, fmt.Errorf("%w: tls key must also be configured",
 					errProxyInvalidTLSConfig,
 				))
-			} else if _, err := tls.LoadX509KeyPair(cfg.TLSCertificate, cfg.TLSKey); err != nil {
+			} else if _, err := cfg.LoadTLSCertificate(); err != nil {
 				errs = append(errs, fmt.Errorf("%w: %w",
 					errProxyInvalidTLSConfig, err,
 				))
@@ -276,4 +278,24 @@ func (cfg *Proxy) Validate() error {
 	}
 
 	return utils.FlattenErrors(errs)
+}
+
+func (cfg *Proxy) LoadTLSCertificate() (tls.Certificate, error) {
+	crt, err := os.ReadFile(cfg.TLSCertificate)
+	if err != nil {
+		return tls.Certificate{}, err
+	}
+	key, err := os.ReadFile(cfg.TLSKey)
+	if err != nil {
+		return tls.Certificate{}, err
+	}
+
+	if debase64, err := base64.StdEncoding.DecodeString(string(crt)); err == nil {
+		crt = debase64
+	}
+	if debase64, err := base64.StdEncoding.DecodeString(string(key)); err == nil {
+		key = debase64
+	}
+
+	return tls.X509KeyPair(crt, key)
 }

@@ -75,7 +75,7 @@ func newProxy(cfg *Config) (*Proxy, error) {
 	}
 
 	if cfg.Proxy.TLSCertificate != "" && cfg.Proxy.TLSKey != "" {
-		cert, err := tls.LoadX509KeyPair(cfg.Proxy.TLSCertificate, cfg.Proxy.TLSKey)
+		cert, err := cfg.Proxy.LoadTLSCertificate()
 		if err != nil {
 			return nil, err
 		}
