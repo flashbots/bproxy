@@ -29,6 +29,7 @@ type Proxy struct {
 	MaxClientConnectionsPerIP       int           `yaml:"max_client_connections_per_ip"`
 	MaxRequestSizeMb                int           `yaml:"max_request_size_mb"`
 	MaxResponseSizeMb               int           `yaml:"max_request_size_mb"`
+	PeerTLSInsecureSkipVerify       bool          `yaml:"peer_tls_insecure_skip_verify"`
 	PeerURLs                        []string      `yaml:"peer_urls"`
 	RemoveBackendFromPeers          bool          `yaml:"remove_backend_from_peers"`
 	TLSCertificate                  string        `yaml:"tls_crt"`

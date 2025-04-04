@@ -161,6 +161,15 @@ func CommandServe(cfg *config.Config) *cli.Command {
 				Value:       160,
 			},
 
+			&cli.BoolFlag{
+				Category:    strings.ToUpper(category),
+				Destination: &cfg.PeerTLSInsecureSkipVerify,
+				EnvVars:     []string{envPrefix + strings.ToUpper(category) + "_PEER_TLS_INSECURE_SKIP_VERIFY"},
+				Name:        category + "-peer-tls-insecure-skip-verify",
+				Usage:       "do not verify " + category + " peers' tls certificates",
+				Value:       false,
+			},
+
 			&cli.StringSliceFlag{ // --xxx-peers
 				Category:    strings.ToUpper(category),
 				Destination: peerURLsFlag,

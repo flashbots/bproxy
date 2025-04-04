@@ -28,6 +28,7 @@ type Proxy struct {
 
 	backend  *fasthttp.Client
 	frontend *fasthttp.Server
+	peer     *fasthttp.Client
 
 	backendURI *fasthttp.URI
 	peerURIs   []*fasthttp.URI
@@ -100,6 +101,24 @@ func newProxy(cfg *Config) (*Proxy, error) {
 	if err := p.backendURI.Parse(nil, []byte(cfg.Proxy.BackendURL)); err != nil {
 		fasthttp.ReleaseURI(p.backendURI)
 		return nil, err
+	}
+
+	if len(cfg.Proxy.PeerURLs) > 0 {
+		p.peer = &fasthttp.Client{
+			MaxConnsPerHost:     cfg.Proxy.MaxBackendConnectionsPerHost,
+			MaxConnWaitTimeout:  cfg.Proxy.MaxBackendConnectionWaitTimeout,
+			MaxIdleConnDuration: 30 * time.Second,
+			MaxResponseBodySize: cfg.Proxy.MaxResponseSizeMb * 1024 * 1024,
+			Name:                cfg.Name,
+			ReadTimeout:         5 * time.Second,
+			WriteTimeout:        5 * time.Second,
+		}
+
+		if cfg.Proxy.PeerTLSInsecureSkipVerify {
+			p.peer.TLSConfig = &tls.Config{
+				InsecureSkipVerify: true,
+			}
+		}
 	}
 
 	p.peerURIs = make([]*fasthttp.URI, 0, len(cfg.Proxy.PeerURLs))
@@ -494,7 +513,7 @@ func (p *Proxy) handle(ctx *fasthttp.RequestCtx) {
 				// NOTE: must _not_ use (or hold references to) `ctx` down here
 				//
 
-				err := p.backend.Do(req, res)
+				err := p.peer.Do(req, res)
 
 				{ // add log fields
 					loggedFields = append(loggedFields,
