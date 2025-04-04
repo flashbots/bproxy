@@ -2,6 +2,7 @@ package proxy
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -71,6 +72,18 @@ func newProxy(cfg *Config) (*Proxy, error) {
 		Name:               cfg.Name,
 		ReadTimeout:        5 * time.Second,
 		WriteTimeout:       5 * time.Second,
+	}
+
+	if cfg.Proxy.TLSCertificate != "" && cfg.Proxy.TLSKey != "" {
+		cert, err := tls.LoadX509KeyPair(cfg.Proxy.TLSCertificate, cfg.Proxy.TLSKey)
+		if err != nil {
+			return nil, err
+		}
+
+		p.frontend.TLSConfig = &tls.Config{
+			Certificates: []tls.Certificate{cert},
+			MinVersion:   tls.VersionTLS12,
+		}
 	}
 
 	p.backend = &fasthttp.Client{
@@ -155,8 +168,14 @@ func (p *Proxy) Run(ctx context.Context, failure chan<- error) {
 			zap.String("backend", p.cfg.Proxy.BackendURL),
 			zap.Strings("peers", p.cfg.Proxy.PeerURLs),
 		)
-		if err := p.frontend.ListenAndServe(p.cfg.Proxy.ListenAddress); err != nil {
-			failure <- err
+		if p.cfg.Proxy.TLSCertificate != "" && p.cfg.Proxy.TLSKey != "" {
+			if err := p.frontend.ListenAndServeTLS(p.cfg.Proxy.ListenAddress, "", ""); err != nil {
+				failure <- err
+			}
+		} else {
+			if err := p.frontend.ListenAndServe(p.cfg.Proxy.ListenAddress); err != nil {
+				failure <- err
+			}
 		}
 		l.Info("Proxy is down")
 	}()
@@ -221,6 +240,20 @@ func (p *Proxy) Observe(ctx context.Context, o otelapi.Observer) error {
 	o.ObserveInt64(metrics.FrontendConnectionsCount, int64(p.frontend.GetOpenConnectionsCount()), otelapi.WithAttributes(
 		attribute.KeyValue{Key: "proxy", Value: attribute.StringValue(p.cfg.Name)},
 	))
+
+	if p.frontend.TLSConfig != nil {
+		for _, cert := range p.frontend.TLSConfig.Certificates {
+			if cert.Leaf != nil {
+				o.ObserveInt64(metrics.TLSValidNotAfter, cert.Leaf.NotAfter.Unix(), otelapi.WithAttributes(
+					attribute.KeyValue{Key: "proxy", Value: attribute.StringValue(p.cfg.Name)},
+				))
+
+				o.ObserveInt64(metrics.TLSValidNotBefore, cert.Leaf.NotBefore.Unix(), otelapi.WithAttributes(
+					attribute.KeyValue{Key: "proxy", Value: attribute.StringValue(p.cfg.Name)},
+				))
+			}
+		}
+	}
 
 	return nil
 }

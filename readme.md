@@ -29,6 +29,8 @@ OPTIONS:
    --authrpc-max-response-size megabytes                   maximum authrpc response payload size in megabytes (default: 160) [$BPROXY_AUTHRPC_MAX_RESPONSE_SIZE]
    --authrpc-peers urls [ --authrpc-peers urls ]           list of authrpc peers urls to mirror the requests to [$BPROXY_AUTHRPC_PEERS]
    --authrpc-remove-backend-from-peers                     remove authrpc backend from peers (default: false) [$BPROXY_AUTHRPC_REMOVE_BACKEND_FROM_PEERS]
+   --authrpc-tls-crt path                                  path to tls certificate (default: uses plain-text http) [$BPROXY_AUTHRPC_TLS_CRT]
+   --authrpc-tls-key path                                  path to tls key (default: uses plain-text http) [$BPROXY_AUTHRPC_TLS_KEY]
 
    CHAOS
 
@@ -62,4 +64,6 @@ OPTIONS:
    --rpc-max-response-size megabytes                   maximum rpc response payload size in megabytes (default: 160) [$BPROXY_RPC_MAX_RESPONSE_SIZE]
    --rpc-peers urls [ --rpc-peers urls ]               list of rpc peers urls to mirror the requests to [$BPROXY_RPC_PEERS]
    --rpc-remove-backend-from-peers                     remove rpc backend from peers (default: false) [$BPROXY_RPC_REMOVE_BACKEND_FROM_PEERS]
+   --rpc-tls-crt path                                  path to tls certificate (default: uses plain-text http) [$BPROXY_RPC_TLS_CRT]
+   --rpc-tls-key path                                  path to tls key (default: uses plain-text http) [$BPROXY_RPC_TLS_KEY]
 ```

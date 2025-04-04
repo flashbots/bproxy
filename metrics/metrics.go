@@ -31,6 +31,8 @@ func Setup(
 		setupMirrorSuccessCount,
 		setupMirrorFailureCount,
 		setupFrontendConnectionsCount,
+		setupTLSValidNotAfter,
+		setupTLSValidNotBefore,
 	} {
 		if err := setup(ctx); err != nil {
 			return err
@@ -39,6 +41,8 @@ func Setup(
 
 	_, err := meter.RegisterCallback(observe,
 		FrontendConnectionsCount,
+		TLSValidNotAfter,
+		TLSValidNotBefore,
 	)
 	if err != nil {
 		return err
@@ -158,5 +162,27 @@ func setupFrontendConnectionsCount(ctx context.Context) error {
 		return err
 	}
 	FrontendConnectionsCount = m
+	return nil
+}
+
+func setupTLSValidNotAfter(ctx context.Context) error {
+	m, err := meter.Int64ObservableGauge("tls_valid_not_after",
+		otelapi.WithDescription("not-after timestamp of tls certificate"),
+	)
+	if err != nil {
+		return err
+	}
+	TLSValidNotAfter = m
+	return nil
+}
+
+func setupTLSValidNotBefore(ctx context.Context) error {
+	m, err := meter.Int64ObservableGauge("tls_valid_not_before",
+		otelapi.WithDescription("not-before timestamp of tls certificate"),
+	)
+	if err != nil {
+		return err
+	}
+	TLSValidNotBefore = m
 	return nil
 }

@@ -1,6 +1,7 @@
 package config
 
 import (
+	"crypto/tls"
 	"errors"
 	"fmt"
 	"net"
@@ -28,6 +29,8 @@ type Proxy struct {
 	MaxResponseSizeMb               int           `yaml:"max_request_size_mb"`
 	PeerURLs                        []string      `yaml:"peer_urls"`
 	RemoveBackendFromPeers          bool          `yaml:"remove_backend_from_peers"`
+	TLSCertificate                  string        `yaml:"tls_crt"`
+	TLSKey                          string        `yaml:"tls_key"`
 }
 
 var (
@@ -45,6 +48,7 @@ var (
 	errProxyInvalidMaxRequestSize                  = errors.New("invalid max request size")
 	errProxyInvalidMaxResponseSize                 = errors.New("invalid max response size")
 	errProxyInvalidPeerURL                         = errors.New("invalid peer url")
+	errProxyInvalidTLSConfig                       = errors.New("invalid tls configuration")
 )
 
 func (cfg *Proxy) Validate() error {
@@ -250,6 +254,24 @@ func (cfg *Proxy) Validate() error {
 			errs = append(errs, fmt.Errorf("%w: too high, must be <=4096: %d",
 				errProxyInvalidMaxResponseSize, cfg.MaxResponseSizeMb,
 			))
+		}
+	}
+
+	{ // tls
+		if cfg.TLSCertificate != "" || cfg.TLSKey != "" {
+			if cfg.TLSCertificate == "" {
+				errs = append(errs, fmt.Errorf("%w: tls certificate must also be configured",
+					errProxyInvalidTLSConfig,
+				))
+			} else if cfg.TLSKey == "" {
+				errs = append(errs, fmt.Errorf("%w: tls key must also be configured",
+					errProxyInvalidTLSConfig,
+				))
+			} else if _, err := tls.LoadX509KeyPair(cfg.TLSCertificate, cfg.TLSKey); err != nil {
+				errs = append(errs, fmt.Errorf("%w: %w",
+					errProxyInvalidTLSConfig, err,
+				))
+			}
 		}
 	}
 

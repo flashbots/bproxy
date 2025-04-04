@@ -177,6 +177,24 @@ func CommandServe(cfg *config.Config) *cli.Command {
 				Usage:       "remove " + category + " backend from peers",
 				Value:       false,
 			},
+
+			&cli.StringFlag{ // --xxx-tls-crt
+				Category:    strings.ToUpper(category),
+				Destination: &cfg.TLSCertificate,
+				DefaultText: "uses plain-text http",
+				EnvVars:     []string{envPrefix + strings.ToUpper(category) + "_TLS_CRT"},
+				Name:        category + "-tls-crt",
+				Usage:       "`path` to tls certificate",
+			},
+
+			&cli.StringFlag{ // --xxx-tls-key
+				Category:    strings.ToUpper(category),
+				DefaultText: "uses plain-text http",
+				Destination: &cfg.TLSKey,
+				EnvVars:     []string{envPrefix + strings.ToUpper(category) + "_TLS_KEY"},
+				Name:        category + "-tls-key",
+				Usage:       "`path` to tls key",
+			},
 		}
 
 		return
