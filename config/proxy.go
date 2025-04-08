@@ -57,7 +57,7 @@ var (
 func (cfg *Proxy) Validate() error {
 	errs := make([]error, 0)
 
-	{ // backend timeout
+	{ // BackendTimeout
 		if cfg.BackendTimeout <= 0 {
 			errs = append(errs, fmt.Errorf("%w: can't be negative: %s",
 				errProxyInvalidBackendTimeout, cfg.BackendTimeout,
@@ -70,103 +70,7 @@ func (cfg *Proxy) Validate() error {
 		}
 	}
 
-	{ // validate listen address
-		if _, err := net.ResolveTCPAddr("tcp", cfg.ListenAddress); err != nil {
-			errs = append(errs, fmt.Errorf("%w: %s: %w",
-				errProxyInvalidListenAddress, cfg.ListenAddress, err,
-			))
-		}
-	}
-
-	{ // validate healthcheck url
-		if cfg.HealthcheckURL != "" {
-			if _, err := url.Parse(cfg.HealthcheckURL); err != nil {
-				errs = append(errs, fmt.Errorf("%w: %w",
-					errProxyInvalidHealthcheckURL, err,
-				))
-			}
-		}
-	}
-
-	{ // healthcheck interval
-		if cfg.HealthcheckInterval < time.Second {
-			errs = append(errs, fmt.Errorf("%w: too low, must be >=1s: %s",
-				errProxyInvalidHealthcheckInterval, cfg.HealthcheckInterval,
-			))
-		}
-		if cfg.HealthcheckInterval > time.Minute {
-			errs = append(errs, fmt.Errorf("%w: too low, must be <=1m: %s",
-				errProxyInvalidHealthcheckInterval, cfg.HealthcheckInterval,
-			))
-		}
-	}
-
-	{ // healthy threshold
-		if cfg.HealthcheckThresholdHealthy < 1 {
-			errs = append(errs, fmt.Errorf("%w: too low, must be >=1: %d",
-				errProxyInvalidHealthcheckThresholdHealthy, cfg.HealthcheckThresholdHealthy,
-			))
-		}
-		if cfg.HealthcheckThresholdHealthy > 10 {
-			errs = append(errs, fmt.Errorf("%w: too low, must be <=10: %d",
-				errProxyInvalidHealthcheckThresholdHealthy, cfg.HealthcheckThresholdHealthy,
-			))
-		}
-	}
-
-	{ // unhealthy threshold
-		if cfg.HealthcheckThresholdUnhealthy < 1 {
-			errs = append(errs, fmt.Errorf("%w: too low, must be >=1: %d",
-				errProxyInvalidHealthcheckThresholdUnhealthy, cfg.HealthcheckThresholdUnhealthy,
-			))
-		}
-		if cfg.HealthcheckThresholdUnhealthy > 10 {
-			errs = append(errs, fmt.Errorf("%w: too low, must be <=10: %d",
-				errProxyInvalidHealthcheckThresholdUnhealthy, cfg.HealthcheckThresholdUnhealthy,
-			))
-		}
-	}
-
-	{ // validate max backend connections per host
-		if cfg.MaxBackendConnectionsPerHost < 0 {
-			errs = append(errs, fmt.Errorf("%w: can't be negative: %d",
-				errProxyInvalidMaxBackendConnectionsPerHost, cfg.MaxBackendConnectionsPerHost,
-			))
-		}
-		if cfg.MaxBackendConnectionsPerHost > 1024 {
-			errs = append(errs, fmt.Errorf("%w: too high, must be <=1024: %d",
-				errProxyInvalidMaxBackendConnectionsPerHost, cfg.MaxBackendConnectionsPerHost,
-			))
-		}
-	}
-
-	{ // validate max backend connection wait timeout
-		if cfg.MaxBackendConnectionWaitTimeout < 0 {
-			errs = append(errs, fmt.Errorf("%w: can't be negative: %s",
-				errProxyInvalidMaxBackendConnectionWaitTimeout, cfg.MaxBackendConnectionWaitTimeout,
-			))
-		}
-		if cfg.MaxBackendConnectionWaitTimeout > time.Minute {
-			errs = append(errs, fmt.Errorf("%w: too high, must be <=1m: %s",
-				errProxyInvalidMaxBackendConnectionWaitTimeout, cfg.MaxBackendConnectionWaitTimeout,
-			))
-		}
-	}
-
-	{ // validate max client connections per ip
-		if cfg.MaxClientConnectionsPerIP < 0 {
-			errs = append(errs, fmt.Errorf("%w: can't be negative: %d",
-				errProxyInvalidMaxClientConnectionsPerIP, cfg.MaxClientConnectionsPerIP,
-			))
-		}
-		if cfg.MaxClientConnectionsPerIP > 1024 {
-			errs = append(errs, fmt.Errorf("%w: too high, must be <=1024: %d",
-				errProxyInvalidMaxClientConnectionsPerIP, cfg.MaxClientConnectionsPerIP,
-			))
-		}
-	}
-
-	{ // prepare and validate backend and peer urls
+	{ // BackendURL + PeerURLs
 		var localIPs []net.IP
 		if cfg.RemoveBackendFromPeers {
 			var err error
@@ -203,9 +107,6 @@ func (cfg *Proxy) Validate() error {
 			}
 			peerIPs, err := net.LookupIP(peerURL.Hostname())
 			if err != nil {
-				errs = append(errs, fmt.Errorf("%w: %s: %w",
-					errProxyInvalidPeerURL, p, err,
-				))
 				continue
 			}
 
@@ -234,7 +135,103 @@ func (cfg *Proxy) Validate() error {
 		cfg.PeerURLs = cfg.PeerURLs[:idx]
 	}
 
-	{ // max request size
+	{ // HealthcheckInterval
+		if cfg.HealthcheckInterval < time.Second {
+			errs = append(errs, fmt.Errorf("%w: too low, must be >=1s: %s",
+				errProxyInvalidHealthcheckInterval, cfg.HealthcheckInterval,
+			))
+		}
+		if cfg.HealthcheckInterval > time.Minute {
+			errs = append(errs, fmt.Errorf("%w: too low, must be <=1m: %s",
+				errProxyInvalidHealthcheckInterval, cfg.HealthcheckInterval,
+			))
+		}
+	}
+
+	{ // HealthcheckThresholdHealthy
+		if cfg.HealthcheckThresholdHealthy < 1 {
+			errs = append(errs, fmt.Errorf("%w: too low, must be >=1: %d",
+				errProxyInvalidHealthcheckThresholdHealthy, cfg.HealthcheckThresholdHealthy,
+			))
+		}
+		if cfg.HealthcheckThresholdHealthy > 10 {
+			errs = append(errs, fmt.Errorf("%w: too low, must be <=10: %d",
+				errProxyInvalidHealthcheckThresholdHealthy, cfg.HealthcheckThresholdHealthy,
+			))
+		}
+	}
+
+	{ // HealthcheckThresholdUnhealthy
+		if cfg.HealthcheckThresholdUnhealthy < 1 {
+			errs = append(errs, fmt.Errorf("%w: too low, must be >=1: %d",
+				errProxyInvalidHealthcheckThresholdUnhealthy, cfg.HealthcheckThresholdUnhealthy,
+			))
+		}
+		if cfg.HealthcheckThresholdUnhealthy > 10 {
+			errs = append(errs, fmt.Errorf("%w: too low, must be <=10: %d",
+				errProxyInvalidHealthcheckThresholdUnhealthy, cfg.HealthcheckThresholdUnhealthy,
+			))
+		}
+	}
+
+	{ // HealthcheckURL
+		if cfg.HealthcheckURL != "" {
+			if _, err := url.Parse(cfg.HealthcheckURL); err != nil {
+				errs = append(errs, fmt.Errorf("%w: %w",
+					errProxyInvalidHealthcheckURL, err,
+				))
+			}
+		}
+	}
+
+	{ // ListenAddress
+		if _, err := net.ResolveTCPAddr("tcp", cfg.ListenAddress); err != nil {
+			errs = append(errs, fmt.Errorf("%w: %s: %w",
+				errProxyInvalidListenAddress, cfg.ListenAddress, err,
+			))
+		}
+	}
+
+	{ // MaxBackendConnectionsPerHost
+		if cfg.MaxBackendConnectionsPerHost < 0 {
+			errs = append(errs, fmt.Errorf("%w: can't be negative: %d",
+				errProxyInvalidMaxBackendConnectionsPerHost, cfg.MaxBackendConnectionsPerHost,
+			))
+		}
+		if cfg.MaxBackendConnectionsPerHost > 1024 {
+			errs = append(errs, fmt.Errorf("%w: too high, must be <=1024: %d",
+				errProxyInvalidMaxBackendConnectionsPerHost, cfg.MaxBackendConnectionsPerHost,
+			))
+		}
+	}
+
+	{ // MaxBackendConnectionWaitTimeout
+		if cfg.MaxBackendConnectionWaitTimeout < 0 {
+			errs = append(errs, fmt.Errorf("%w: can't be negative: %s",
+				errProxyInvalidMaxBackendConnectionWaitTimeout, cfg.MaxBackendConnectionWaitTimeout,
+			))
+		}
+		if cfg.MaxBackendConnectionWaitTimeout > time.Minute {
+			errs = append(errs, fmt.Errorf("%w: too high, must be <=1m: %s",
+				errProxyInvalidMaxBackendConnectionWaitTimeout, cfg.MaxBackendConnectionWaitTimeout,
+			))
+		}
+	}
+
+	{ // MaxClientConnectionsPerIP
+		if cfg.MaxClientConnectionsPerIP < 0 {
+			errs = append(errs, fmt.Errorf("%w: can't be negative: %d",
+				errProxyInvalidMaxClientConnectionsPerIP, cfg.MaxClientConnectionsPerIP,
+			))
+		}
+		if cfg.MaxClientConnectionsPerIP > 1024 {
+			errs = append(errs, fmt.Errorf("%w: too high, must be <=1024: %d",
+				errProxyInvalidMaxClientConnectionsPerIP, cfg.MaxClientConnectionsPerIP,
+			))
+		}
+	}
+
+	{ // MaxRequestSizeMb
 		if cfg.MaxRequestSizeMb < 4 {
 			errs = append(errs, fmt.Errorf("%w: too low, must be >=4: %d",
 				errProxyInvalidMaxRequestSize, cfg.MaxRequestSizeMb,
@@ -247,7 +244,7 @@ func (cfg *Proxy) Validate() error {
 		}
 	}
 
-	{ // max response size
+	{ // MaxResponseSizeMb
 		if cfg.MaxResponseSizeMb < 4 {
 			errs = append(errs, fmt.Errorf("%w: too low, must be >=4: %d",
 				errProxyInvalidMaxResponseSize, cfg.MaxResponseSizeMb,
@@ -260,7 +257,7 @@ func (cfg *Proxy) Validate() error {
 		}
 	}
 
-	{ // tls
+	{ // TLSCertificate + TLSKey
 		if cfg.TLSCertificate != "" || cfg.TLSKey != "" {
 			if cfg.TLSCertificate == "" {
 				errs = append(errs, fmt.Errorf("%w: tls certificate must also be configured",
