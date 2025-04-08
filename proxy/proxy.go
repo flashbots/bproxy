@@ -326,7 +326,7 @@ func (p *Proxy) handle(ctx *fasthttp.RequestCtx) {
 				)
 			}
 			if rand.Float64() < p.cfg.Chaos.InjectedJrpcErrorProbability/100 { // inject jrpc error
-				proxy = p.injectJrpcError(call.jrpcID, req, res)
+				proxy = p.injectJrpcError(call, req, res)
 				res = fasthttp.AcquireResponse()
 				call.proxy = false
 				call.mirror = false
@@ -363,7 +363,6 @@ func (p *Proxy) handle(ctx *fasthttp.RequestCtx) {
 			zap.String("remote_addr", ctx.RemoteAddr().String()),
 			zap.String("downstream_host", str(p.backendURI.Host())),
 			zap.String("jrpc_method", call.jrpcMethod),
-			zap.Uint64("jrpc_id", call.jrpcID),
 		)
 
 		if len(call.transactions) > 0 {
@@ -630,14 +629,14 @@ func (p *Proxy) injectHttpError(_ *fasthttp.Request, res *fasthttp.Response) err
 }
 
 func (p *Proxy) injectJrpcError(
-	jrpcID uint64, _ *fasthttp.Request, _ *fasthttp.Response,
+	call *triagedRequest, _ *fasthttp.Request, _ *fasthttp.Response,
 ) func(_ *fasthttp.Request, _ *fasthttp.Response) error {
 	return func(_ *fasthttp.Request, res *fasthttp.Response) error {
 		res.SetStatusCode(fasthttp.StatusOK)
 		res.Header.Add("content-type", "application/json; charset=utf-8")
 		res.SetBody([]byte(fmt.Sprintf(
-			`{"jsonrpc":"2.0","id":%d,"error":{"code":-32042,"message:"chaos-injected error"}}`,
-			jrpcID,
+			`{"jsonrpc":"2.0","id":%s,"error":{"code":-32042,"message:"chaos-injected error"}}`,
+			call.jrpcID,
 		)))
 
 		return nil

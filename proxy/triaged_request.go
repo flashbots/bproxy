@@ -12,7 +12,7 @@ type triagedRequest struct {
 	mirror bool
 
 	jrpcMethod string
-	jrpcID     uint64
+	jrpcID     string
 
 	response *fasthttp.Response
 
