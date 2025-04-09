@@ -25,6 +25,8 @@ func Setup(
 		setupMeter, // must come first
 		setupRequestSize,
 		setupResponseSize,
+		setupLatencyBackend,
+		setupLatencyProxy,
 		setupProxySuccessCount,
 		setupProxyFailureCount,
 		setupProxyFakeCount,
@@ -79,6 +81,7 @@ func setupRequestSize(ctx context.Context) error {
 	m, err := meter.Int64Histogram("request_size",
 		otelapi.WithDescription("sizes of incoming requests"),
 		otelapi.WithExplicitBucketBoundaries(0, 1, 16, 256, 4096, 65536, 1048576, 16777216, 268435456, 68719476736),
+		otelapi.WithUnit("By"),
 	)
 	if err != nil {
 		return err
@@ -91,11 +94,38 @@ func setupResponseSize(ctx context.Context) error {
 	m, err := meter.Int64Histogram("response_size",
 		otelapi.WithDescription("sizes of sent responses"),
 		otelapi.WithExplicitBucketBoundaries(0, 1, 16, 256, 4096, 65536, 1048576, 16777216, 268435456, 68719476736),
+		otelapi.WithUnit("By"),
 	)
 	if err != nil {
 		return err
 	}
 	ResponseSize = m
+	return nil
+}
+
+func setupLatencyBackend(ctx context.Context) error {
+	m, err := meter.Int64Histogram("latency_backend",
+		otelapi.WithDescription("latency of backend responses"),
+		otelapi.WithExplicitBucketBoundaries(0, 1, 2, 4, 8, 16, 32, 64, 128, 256),
+		otelapi.WithUnit("ms"),
+	)
+	if err != nil {
+		return err
+	}
+	LatencyBackend = m
+	return nil
+}
+
+func setupLatencyProxy(ctx context.Context) error {
+	m, err := meter.Int64Histogram("latency_proxy",
+		otelapi.WithDescription("latency added by proxy"),
+		otelapi.WithUnit("ms"),
+		otelapi.WithExplicitBucketBoundaries(0, 1, 2, 3, 4, 6, 8, 12, 16, 24),
+	)
+	if err != nil {
+		return err
+	}
+	LatencyProxy = m
 	return nil
 }
 

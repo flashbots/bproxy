@@ -473,13 +473,20 @@ func (p *Proxy) handle(ctx *fasthttp.RequestCtx) {
 			}
 
 			now := time.Now()
+			latency_warmup := tsReqProxyStart.Sub(tsReqReceived)
+			latency_backend := tsReqProxyEnd.Sub(tsReqProxyStart)
+			latency_cooldown := now.Sub(tsResProxyEnd)
+
 			loggedFields = append(loggedFields,
 				zap.Int("http_status", res.StatusCode()),
-				zap.Duration("latency_warmup", tsReqProxyStart.Sub(tsReqReceived)),
-				zap.Duration("latency_backend", tsReqProxyEnd.Sub(tsReqProxyStart)),
-				zap.Duration("latency_cooldown", now.Sub(tsResProxyEnd)),
+				zap.Duration("latency_warmup", latency_warmup),
+				zap.Duration("latency_backend", latency_backend),
+				zap.Duration("latency_cooldown", latency_cooldown),
 				zap.Duration("latency_total", now.Sub(tsReqReceived)),
 			)
+
+			metrics.LatencyBackend.Record(ctx, latency_backend.Milliseconds(), metricAttributes)
+			metrics.LatencyProxy.Record(ctx, (latency_warmup + latency_cooldown).Milliseconds(), metricAttributes)
 		}
 
 		if !success {
