@@ -296,7 +296,7 @@ func (p *Proxy) handle(ctx *fasthttp.RequestCtx) {
 
 	metrics.RequestSize.Record(context.TODO(), int64(ctx.Request.Header.ContentLength()), otelapi.WithAttributes(
 		attribute.KeyValue{Key: "proxy", Value: attribute.StringValue(p.cfg.Name)},
-		attribute.KeyValue{Key: "proxy", Value: attribute.StringValue(str(ctx.Request.Header.ContentEncoding()))},
+		attribute.KeyValue{Key: "content_encoding", Value: attribute.StringValue(str(ctx.Request.Header.ContentEncoding()))},
 	))
 
 	call := p.triage(ctx.Request.Body())
