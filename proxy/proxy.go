@@ -93,7 +93,7 @@ func newProxy(cfg *Config) (*Proxy, error) {
 		MaxIdleConnDuration: 30 * time.Second,
 		MaxResponseBodySize: cfg.Proxy.MaxResponseSizeMb * 1024 * 1024,
 		Name:                cfg.Name,
-		ReadTimeout:         5 * time.Second,
+		ReadTimeout:         cfg.Proxy.BackendTimeout,
 		WriteTimeout:        5 * time.Second,
 	}
 
