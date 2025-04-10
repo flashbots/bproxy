@@ -106,7 +106,7 @@ func setupResponseSize(ctx context.Context) error {
 func setupLatencyBackend(ctx context.Context) error {
 	m, err := meter.Int64Histogram("latency_backend",
 		otelapi.WithDescription("latency of backend responses"),
-		otelapi.WithExplicitBucketBoundaries(0, 1, 2, 4, 8, 16, 32, 64, 128, 256),
+		otelapi.WithExplicitBucketBoundaries(0, 1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024),
 		otelapi.WithUnit("ms"),
 	)
 	if err != nil {
