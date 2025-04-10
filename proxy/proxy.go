@@ -550,7 +550,7 @@ func (p *Proxy) handle(ctx *fasthttp.RequestCtx) {
 
 				{ // add log fields
 					loggedFields = append(loggedFields,
-						zap.String("downstream_host", str(uri.Host())),
+						zap.String("mirror_host", str(uri.Host())),
 					)
 
 					if p.cfg.Proxy.LogRequests {
@@ -569,7 +569,7 @@ func (p *Proxy) handle(ctx *fasthttp.RequestCtx) {
 
 				metricAttributes := otelapi.WithAttributes(
 					attribute.KeyValue{Key: "proxy", Value: attribute.StringValue(p.cfg.Name)},
-					attribute.KeyValue{Key: "downstream_host", Value: attribute.StringValue(str(uri.Host()))},
+					attribute.KeyValue{Key: "mirror_host", Value: attribute.StringValue(str(uri.Host()))},
 					attribute.KeyValue{Key: "jrpc_method", Value: attribute.StringValue(jrpcMethodForMetrics)},
 				)
 
