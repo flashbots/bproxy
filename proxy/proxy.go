@@ -330,7 +330,8 @@ func (p *Proxy) handle(ctx *fasthttp.RequestCtx) {
 
 		{ // configure processing mode (proxy, fake, chaos)
 			if p.extraMirroredJrpcMethods != nil {
-				_, call.mirror = p.extraMirroredJrpcMethods[call.jrpcMethod]
+				_, mirror := p.extraMirroredJrpcMethods[call.jrpcMethod]
+				call.mirror = call.mirror || mirror
 			}
 
 			if p.cfg.Chaos.Enabled {

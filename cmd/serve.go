@@ -53,7 +53,7 @@ func CommandServe(cfg *config.Config) *cli.Command {
 				Value:       false,
 			},
 
-			&cli.StringSliceFlag{ // --xxx-peers
+			&cli.StringSliceFlag{ // --xxx-extra-mirrored-jrpc-methods
 				Category:    strings.ToUpper(category),
 				Destination: extraMirroredJrpcMethods,
 				EnvVars:     []string{envPrefix + strings.ToUpper(category) + "_EXTRA_MIRRORED_JRPC_METHODS"},
@@ -218,7 +218,7 @@ func CommandServe(cfg *config.Config) *cli.Command {
 		return
 	}
 
-	authrpcFlags, peerURLsAuthRPC, extraMirroredJrpcMethodsAuthRPC := proxyFlags(
+	authrpcFlags, extraMirroredJrpcMethodsAuthRPC, peerURLsAuthRPC := proxyFlags(
 		cfg.AuthRpcProxy, categoryAuthRPC, "http://127.0.0.1:18551", "0.0.0.0:8551",
 	)
 
@@ -277,7 +277,7 @@ func CommandServe(cfg *config.Config) *cli.Command {
 		},
 	}
 
-	rpcFlags, peerURLsRPC, extraMirroredJrpcMethodsRPC := proxyFlags(
+	rpcFlags, extraMirroredJrpcMethodsRPC, peerURLsRPC := proxyFlags(
 		cfg.RpcProxy, categoryRPC, "http://127.0.0.1:18545", "0.0.0.0:8545",
 	)
 
