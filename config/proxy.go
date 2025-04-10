@@ -17,6 +17,7 @@ type Proxy struct {
 	BackendTimeout                  time.Duration `yaml:"backend_timeout"`
 	BackendURL                      string        `yaml:"backend_url"`
 	Enabled                         bool          `yaml:"enabled"`
+	ExtraMirroredJrpcMethods        []string      `yaml:"extra_mirrored_jrpc_methods"`
 	HealthcheckInterval             time.Duration `yaml:"healthcheck_interval"`
 	HealthcheckThresholdHealthy     int           `yaml:"healthcheck_threshold_healthy"`
 	HealthcheckThresholdUnhealthy   int           `yaml:"healthcheck_threshold_unhealthy"`

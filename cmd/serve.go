@@ -21,7 +21,8 @@ const (
 func CommandServe(cfg *config.Config) *cli.Command {
 	proxyFlags := func(
 		cfg *config.Proxy, category string, backendURL, listenAddress string,
-	) (flags []cli.Flag, peerURLsFlag *cli.StringSlice) {
+	) (flags []cli.Flag, extraMirroredJrpcMethods, peerURLsFlag *cli.StringSlice) {
+		extraMirroredJrpcMethods = &cli.StringSlice{}
 		peerURLsFlag = &cli.StringSlice{}
 
 		flags = []cli.Flag{
@@ -50,6 +51,14 @@ func CommandServe(cfg *config.Config) *cli.Command {
 				Name:        category + "-enabled",
 				Usage:       "enable " + category + " proxy",
 				Value:       false,
+			},
+
+			&cli.StringSliceFlag{ // --xxx-peers
+				Category:    strings.ToUpper(category),
+				Destination: extraMirroredJrpcMethods,
+				EnvVars:     []string{envPrefix + strings.ToUpper(category) + "_EXTRA_MIRRORED_JRPC_METHODS"},
+				Name:        category + "-extra-mirrored-jrpc-methods",
+				Usage:       "list of " + category + " jrpc `methods` that will be mirrored in addition to the default",
 			},
 
 			&cli.StringFlag{ // --xxx-healthcheck
@@ -209,7 +218,7 @@ func CommandServe(cfg *config.Config) *cli.Command {
 		return
 	}
 
-	authrpcFlags, peerURLsAuthRPC := proxyFlags(
+	authrpcFlags, peerURLsAuthRPC, extraMirroredJrpcMethodsAuthRPC := proxyFlags(
 		cfg.AuthRpcProxy, categoryAuthRPC, "http://127.0.0.1:18551", "0.0.0.0:8551",
 	)
 
@@ -268,7 +277,7 @@ func CommandServe(cfg *config.Config) *cli.Command {
 		},
 	}
 
-	rpcFlags, peerURLsRPC := proxyFlags(
+	rpcFlags, peerURLsRPC, extraMirroredJrpcMethodsRPC := proxyFlags(
 		cfg.RpcProxy, categoryRPC, "http://127.0.0.1:18545", "0.0.0.0:8545",
 	)
 
@@ -297,7 +306,10 @@ func CommandServe(cfg *config.Config) *cli.Command {
 
 		Before: func(_ *cli.Context) error {
 			cfg.AuthRpcProxy.PeerURLs = peerURLsAuthRPC.Value()
+			cfg.AuthRpcProxy.ExtraMirroredJrpcMethods = extraMirroredJrpcMethodsAuthRPC.Value()
+
 			cfg.RpcProxy.PeerURLs = peerURLsRPC.Value()
+			cfg.RpcProxy.ExtraMirroredJrpcMethods = extraMirroredJrpcMethodsRPC.Value()
 
 			return cfg.Validate()
 		},

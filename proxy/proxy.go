@@ -9,6 +9,7 @@ import (
 	"math/rand/v2"
 	"net"
 	"strconv"
+	"strings"
 
 	"sync"
 	"time"
@@ -30,8 +31,9 @@ type Proxy struct {
 	frontend *fasthttp.Server
 	peer     *fasthttp.Client
 
-	backendURI *fasthttp.URI
-	peerURIs   []*fasthttp.URI
+	backendURI               *fasthttp.URI
+	extraMirroredJrpcMethods map[string]struct{}
+	peerURIs                 []*fasthttp.URI
 
 	healthcheck         *fasthttp.Client
 	healthcheckURI      *fasthttp.URI
@@ -165,6 +167,16 @@ func newProxy(cfg *Config) (*Proxy, error) {
 		p.healthcheckStatuses = types.NewRingBuffer[bool](p.healthcheckDepth)
 
 		p.isHealthy = true
+	}
+
+	if len(cfg.Proxy.ExtraMirroredJrpcMethods) > 0 {
+		p.extraMirroredJrpcMethods = make(map[string]struct{}, len(cfg.Proxy.ExtraMirroredJrpcMethods))
+		for _, method := range cfg.Proxy.ExtraMirroredJrpcMethods {
+			method = strings.TrimSpace(method)
+			if _, known := p.extraMirroredJrpcMethods[method]; !known {
+				p.extraMirroredJrpcMethods[method] = struct{}{}
+			}
+		}
 	}
 
 	return p, nil
@@ -314,46 +326,53 @@ func (p *Proxy) handle(ctx *fasthttp.RequestCtx) {
 
 		loggedFields := make([]zap.Field, 0, 12)
 
-		switch { // configure processing mode (proxy, fake, chaos)
-		case p.cfg.Chaos.Enabled:
-			if rand.Float64() < p.cfg.Chaos.InjectedHttpErrorProbability/100 { // inject http error
-				proxy = p.injectHttpError
-				res = fasthttp.AcquireResponse()
-				call.proxy = false
-				call.mirror = false
-				loggedFields = append(loggedFields,
-					zap.Bool("chaos_http_error", true),
-				)
-			}
-			if rand.Float64() < p.cfg.Chaos.InjectedJrpcErrorProbability/100 { // inject jrpc error
-				proxy = p.injectJrpcError(call, req, res)
-				res = fasthttp.AcquireResponse()
-				call.proxy = false
-				call.mirror = false
-				loggedFields = append(loggedFields,
-					zap.Bool("chaos_jrpc_error", true),
-				)
-			}
-			if rand.Float64() < p.cfg.Chaos.InjectedInvalidJrpcResponseProbability/100 { // inject bad jrpc response
-				proxy = p.injectInvalidJrpcResponse
-				res = fasthttp.AcquireResponse()
-				call.proxy = false
-				call.mirror = false
-				loggedFields = append(loggedFields,
-					zap.Bool("chaos_invalid_jrpc_response", true),
-				)
+		{ // configure processing mode (proxy, fake, chaos)
+			if p.extraMirroredJrpcMethods != nil {
+				_, call.mirror = p.extraMirroredJrpcMethods[call.jrpcMethod]
 			}
 
-		case call.proxy:
-			proxy = p.backend.Do
-			res = fasthttp.AcquireResponse()
+			if p.cfg.Chaos.Enabled {
+				injectHttpError := rand.Float64() < p.cfg.Chaos.InjectedHttpErrorProbability/100
+				injectJrpcError := rand.Float64() < p.cfg.Chaos.InjectedJrpcErrorProbability/100
+				injectBadJrpcResponse := rand.Float64() < p.cfg.Chaos.InjectedInvalidJrpcResponseProbability/100
 
-		default:
-			proxy = func(_ *fasthttp.Request, _ *fasthttp.Response) error { return nil }
-			res = call.response
-			call.mirror = false // request won't be proxied, shouldn't mirror either
+				if injectHttpError || injectJrpcError || injectBadJrpcResponse {
+					res = fasthttp.AcquireResponse()
+					call.proxy = false
+					call.mirror = false
+				}
+
+				switch {
+				case injectHttpError:
+					proxy = p.injectHttpError
+					loggedFields = append(loggedFields,
+						zap.Bool("chaos_http_error", true),
+					)
+				case injectJrpcError:
+					proxy = p.injectJrpcError(call, req, res)
+					loggedFields = append(loggedFields,
+						zap.Bool("chaos_jrpc_error", true),
+					)
+				case injectBadJrpcResponse:
+					proxy = p.injectInvalidJrpcResponse
+					loggedFields = append(loggedFields,
+						zap.Bool("chaos_invalid_jrpc_response", true),
+					)
+				}
+			}
+
+			if res == nil { // are not injecting chaos
+				if call.proxy { // will proxy
+					res = fasthttp.AcquireResponse()
+					proxy = p.backend.Do
+				} else { // will fake
+					res = call.response
+					proxy = func(_ *fasthttp.Request, _ *fasthttp.Response) error { return nil }
+				}
+			}
+
+			defer fasthttp.ReleaseResponse(res)
 		}
-		defer fasthttp.ReleaseResponse(res)
 
 		loggedFields = append(loggedFields,
 			zap.Time("ts_request_received", tsReqReceived),
