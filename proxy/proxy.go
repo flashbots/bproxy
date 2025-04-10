@@ -304,6 +304,8 @@ func (p *Proxy) handle(ctx *fasthttp.RequestCtx) {
 		res *fasthttp.Response
 
 		proxy func(req *fasthttp.Request, res *fasthttp.Response) error
+
+		jrpcMethodForMetrics string
 	)
 
 	metrics.RequestSize.Record(context.TODO(), int64(ctx.Request.Header.ContentLength()), otelapi.WithAttributes(
@@ -391,6 +393,11 @@ func (p *Proxy) handle(ctx *fasthttp.RequestCtx) {
 		}
 
 		l = p.logger.With(loggedFields...)
+
+		jrpcMethodForMetrics = call.jrpcMethod
+		if call.mirror {
+			jrpcMethodForMetrics += "+"
+		}
 	}
 
 	wg.Add(1)
@@ -427,10 +434,6 @@ func (p *Proxy) handle(ctx *fasthttp.RequestCtx) {
 			}
 		}
 
-		jrpcMethodForMetrics := call.jrpcMethod
-		if call.mirror {
-			jrpcMethodForMetrics += "+"
-		}
 		metricAttributes := otelapi.WithAttributes(
 			attribute.KeyValue{Key: "proxy", Value: attribute.StringValue(p.cfg.Name)},
 			attribute.KeyValue{Key: "jrpc_method", Value: attribute.StringValue(jrpcMethodForMetrics)},
@@ -566,7 +569,7 @@ func (p *Proxy) handle(ctx *fasthttp.RequestCtx) {
 				metricAttributes := otelapi.WithAttributes(
 					attribute.KeyValue{Key: "proxy", Value: attribute.StringValue(p.cfg.Name)},
 					attribute.KeyValue{Key: "downstream_host", Value: attribute.StringValue(str(uri.Host()))},
-					attribute.KeyValue{Key: "jrpc_method", Value: attribute.StringValue(call.jrpcMethod)},
+					attribute.KeyValue{Key: "jrpc_method", Value: attribute.StringValue(jrpcMethodForMetrics)},
 				)
 
 				if err == nil {

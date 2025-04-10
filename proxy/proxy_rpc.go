@@ -3,7 +3,7 @@ package proxy
 import (
 	"context"
 	"encoding/json"
-	"strings"
+	"strconv"
 
 	"github.com/flashbots/bproxy/types"
 
@@ -156,19 +156,11 @@ func (p *RpcProxy) triageBatch(batch []types.JrpcCall) *triagedRequest {
 		}
 	}
 
-	methodsBuf := strings.Builder{}
-	for method := range methodsSet {
-		methodsBuf.WriteString(method)
-		methodsBuf.WriteRune(',')
-	}
-	methods := methodsBuf.String()
-	methods = methods[:len(methods)-1]
-
 	// proxy all non sendRawTX calls, but don't mirror them
 	if _, hasEthSendRawTx := methodsSet["eth_sendRawTransaction"]; !hasEthSendRawTx {
 		return &triagedRequest{
 			proxy:      true,
-			jrpcMethod: methods,
+			jrpcMethod: "batch(" + strconv.Itoa(len(batch)) + ")",
 			jrpcID:     batch[0].GetID(),
 		}
 	}
@@ -176,7 +168,7 @@ func (p *RpcProxy) triageBatch(batch []types.JrpcCall) *triagedRequest {
 	res := &triagedRequest{
 		proxy:        true,
 		mirror:       true,
-		jrpcMethod:   methods,
+		jrpcMethod:   "batch(" + strconv.Itoa(len(batch)) + ")",
 		jrpcID:       batch[0].GetID(),
 		transactions: make([]triagedRequestTx, 0),
 	}
