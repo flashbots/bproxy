@@ -128,6 +128,14 @@ func (p *AuthrpcProxy) triage(body []byte) *triagedRequest {
 			jrpcID:     jrpc.GetID(),
 		}
 
+	case "engine_newPayloadV4":
+		// proxy & mirror
+		return &triagedRequest{
+			proxy:      true,
+			mirror:     true,
+			jrpcMethod: jrpc.GetMethod(),
+			jrpcID:     jrpc.GetID(),
+		}
 	case "miner_setMaxDASize":
 		// proxy & mirror
 		return &triagedRequest{
