@@ -7,6 +7,7 @@ toolchain go1.23.7
 require (
 	github.com/ethereum/go-ethereum v1.15.5
 	github.com/goccy/go-json v0.10.5
+	github.com/google/go-tdx-guest v0.3.1
 	github.com/google/uuid v1.6.0
 	github.com/prometheus/client_golang v1.19.1
 	github.com/stretchr/testify v1.10.0
@@ -36,6 +37,8 @@ require (
 	github.com/ethereum/go-verkle v0.2.2 // indirect
 	github.com/go-logr/logr v1.4.2 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
+	github.com/google/go-configfs-tsm v0.2.2 // indirect
+	github.com/google/logger v1.1.1 // indirect
 	github.com/holiman/uint256 v1.3.2 // indirect
 	github.com/klauspost/compress v1.17.11 // indirect
 	github.com/mmcloughlin/addchain v0.4.0 // indirect

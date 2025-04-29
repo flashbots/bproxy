@@ -15,6 +15,7 @@ type JrpcCall interface {
 	DecodeEthSendRawTransaction() (ethcommon.Address, *ethtypes.Transaction, error)
 	GetID() string
 	GetMethod() string
+	GetParams() json.RawMessage
 }
 
 type JrpcCall_Uint64 struct {
@@ -53,6 +54,10 @@ func (call JrpcCall_Uint64) GetMethod() string {
 	return call.Method
 }
 
+func (call JrpcCall_Uint64) GetParams() json.RawMessage {
+	return call.Params
+}
+
 // string
 
 func (call JrpcCall_String) DecodeEthSendRawTransaction() (ethcommon.Address, *ethtypes.Transaction, error) {
@@ -68,8 +73,13 @@ func (call JrpcCall_String) DecodeEthSendRawTransaction() (ethcommon.Address, *e
 func (call JrpcCall_String) GetID() string {
 	return `"` + call.ID + `"`
 }
+
 func (call JrpcCall_String) GetMethod() string {
 	return call.Method
+}
+
+func (call JrpcCall_String) GetParams() json.RawMessage {
+	return call.Params
 }
 
 // common

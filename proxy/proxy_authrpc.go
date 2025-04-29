@@ -136,6 +136,7 @@ func (p *AuthrpcProxy) triage(body []byte) *triagedRequest {
 			jrpcMethod: jrpc.GetMethod(),
 			jrpcID:     jrpc.GetID(),
 		}
+
 	case "miner_setMaxDASize":
 		// proxy & mirror
 		return &triagedRequest{
@@ -191,18 +192,10 @@ func (p *AuthrpcProxy) triage(body []byte) *triagedRequest {
 				zap.String("finalised", finalised),
 			)
 
-			res := fasthttp.AcquireResponse()
-			res.SetStatusCode(fasthttp.StatusOK)
-			res.Header.Add("content-type", "application/json; charset=utf-8")
-			res.SetBody([]byte(fmt.Sprintf(
-				`{"jsonrpc":"2.0","id":%s,"result":{"payloadStatus":{"status":"VALID","latestValidHash":"%s"}}}`,
-				jrpc.GetID(), head,
-			)))
-
 			return &triagedRequest{
 				jrpcMethod: jrpc.GetMethod(),
 				jrpcID:     jrpc.GetID(),
-				response:   res,
+				response:   p.interceptEngineForkchoiceUpdatedV3(jrpc, head),
 			}
 		}
 
@@ -228,4 +221,17 @@ func (p *AuthrpcProxy) alreadySeen(headBlockHash, safeBlockHash, finalisedBlockH
 	p.seenHeads[key] = time.Now()
 
 	return false
+}
+
+func (p *AuthrpcProxy) interceptEngineForkchoiceUpdatedV3(jrpc types.JrpcCall, head string) *fasthttp.Response {
+	res := fasthttp.AcquireResponse()
+
+	res.SetStatusCode(fasthttp.StatusOK)
+	res.Header.Add("content-type", "application/json; charset=utf-8")
+	res.SetBody([]byte(fmt.Sprintf(
+		`{"jsonrpc":"2.0","id":%s,"result":{"payloadStatus":{"status":"VALID","latestValidHash":"%s"}}}`,
+		jrpc.GetID(), head,
+	)))
+
+	return res
 }

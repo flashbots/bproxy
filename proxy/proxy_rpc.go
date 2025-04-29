@@ -3,9 +3,16 @@ package proxy
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"strconv"
 
+	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/flashbots/bproxy/types"
+	"github.com/valyala/fasthttp"
+
+	tdxabi "github.com/google/go-tdx-guest/abi"
+	tdx "github.com/google/go-tdx-guest/client"
+	tdxpb "github.com/google/go-tdx-guest/proto/tdx"
 
 	otelapi "go.opentelemetry.io/otel/metric"
 	"go.uber.org/zap"
@@ -111,24 +118,32 @@ func (p *RpcProxy) triage(body []byte) *triagedRequest {
 	}
 }
 
-func (p *RpcProxy) triageSingle(call types.JrpcCall) *triagedRequest {
+func (p *RpcProxy) triageSingle(jrpc types.JrpcCall) *triagedRequest {
+	if jrpc.GetMethod() == "tee_getDcapQuote" {
+		return &triagedRequest{
+			jrpcMethod: jrpc.GetMethod(),
+			jrpcID:     jrpc.GetID(),
+			response:   p.interceptTeeGetDcapQuote(jrpc),
+		}
+	}
+
 	// proxy all non sendRawTX calls, but don't mirror them
-	if call.GetMethod() != "eth_sendRawTransaction" {
+	if jrpc.GetMethod() != "eth_sendRawTransaction" {
 		return &triagedRequest{
 			proxy:      true,
-			jrpcMethod: call.GetMethod(),
-			jrpcID:     call.GetID(),
+			jrpcMethod: jrpc.GetMethod(),
+			jrpcID:     jrpc.GetID(),
 		}
 	}
 
 	res := &triagedRequest{
 		proxy:      true,
 		mirror:     true,
-		jrpcMethod: call.GetMethod(),
-		jrpcID:     call.GetID(),
+		jrpcMethod: jrpc.GetMethod(),
+		jrpcID:     jrpc.GetID(),
 	}
 
-	if from, tx, err := call.DecodeEthSendRawTransaction(); err == nil {
+	if from, tx, err := jrpc.DecodeEthSendRawTransaction(); err == nil {
 		res.transactions = []triagedRequestTx{{
 			From:  &from,
 			To:    tx.To(),
@@ -150,9 +165,9 @@ func (p *RpcProxy) triageBatch(batch []types.JrpcCall) *triagedRequest {
 	}
 
 	methodsSet := make(map[string]struct{}, 0)
-	for _, call := range batch {
-		if _, known := methodsSet[call.GetMethod()]; !known {
-			methodsSet[call.GetMethod()] = struct{}{}
+	for _, jrpc := range batch {
+		if _, known := methodsSet[jrpc.GetMethod()]; !known {
+			methodsSet[jrpc.GetMethod()] = struct{}{}
 		}
 	}
 
@@ -190,6 +205,99 @@ func (p *RpcProxy) triageBatch(batch []types.JrpcCall) *triagedRequest {
 			)
 		}
 	}
+
+	return res
+}
+
+func (p *RpcProxy) interceptTeeGetDcapQuote(jrpc types.JrpcCall) *fasthttp.Response {
+	res := fasthttp.AcquireResponse()
+
+	res.SetStatusCode(fasthttp.StatusOK)
+	res.Header.Add("content-type", "application/json; charset=utf-8")
+
+	provider, err := tdx.GetQuoteProvider()
+	if err != nil {
+		res.SetBody([]byte(fmt.Sprintf(
+			`{"jsonrpc":"2.0","id":%s,"error":{"code":-32043,"message:"not in tdx"}}`,
+			jrpc.GetID(),
+		)))
+		return res
+	}
+
+	var params []string
+	if err := json.Unmarshal(jrpc.GetParams(), &params); err != nil {
+		res.SetBody([]byte(fmt.Sprintf(
+			`{"jsonrpc":"2.0","id":%s,"error":{"code":-32602,"message:"invalid report data"}}`,
+			jrpc.GetID(),
+		)))
+		return res
+	}
+
+	if len(params) != 1 {
+		res.SetBody([]byte(fmt.Sprintf(
+			`{"jsonrpc":"2.0","id":%s,"error":{"code":-32602,"message:"only 1 parameter expected"}}`,
+			jrpc.GetID(),
+		)))
+		return res
+	}
+
+	reportData, err := hexutil.Decode(params[0])
+	if err != nil {
+		res.SetBody([]byte(fmt.Sprintf(
+			`{"jsonrpc":"2.0","id":%s,"error":{"code":-32602,"message:"parameter is not a hex string"}}`,
+			jrpc.GetID(),
+		)))
+		return res
+	}
+
+	if len(reportData) != 64 {
+		res.SetBody([]byte(fmt.Sprintf(
+			`{"jsonrpc":"2.0","id":%s,"error":{"code":-32602,"message:"parameter is not 64 bytes hex"}}`,
+			jrpc.GetID(),
+		)))
+		return res
+	}
+
+	rawQuote, err := tdx.GetRawQuote(provider, [64]byte(reportData))
+	if err != nil {
+		res.SetBody([]byte(fmt.Sprintf(
+			`{"jsonrpc":"2.0","id":%s,"error":{"code":-32043,"message:"failed to get tdx quote: %s"}}`,
+			jrpc.GetID(), err,
+		)))
+		return res
+	}
+
+	_quote, err := tdxabi.QuoteToProto(rawQuote)
+	if err != nil {
+		res.SetBody([]byte(fmt.Sprintf(
+			`{"jsonrpc":"2.0","id":%s,"error":{"code":-32603,"message:"failed to decode tdx quote: %s"}}`,
+			jrpc.GetID(), err,
+		)))
+		return res
+	}
+
+	quote := _quote.(*tdxpb.QuoteV4)
+	if quote == nil {
+		res.SetBody([]byte(fmt.Sprintf(
+			`{"jsonrpc":"2.0","id":%s,"error":{"code":-32603,"message:"unknown tdx quote format"}}`,
+			jrpc.GetID(),
+		)))
+		return res
+	}
+
+	jsonQuote, err := json.Marshal(quote)
+	if err != nil {
+		res.SetBody([]byte(fmt.Sprintf(
+			`{"jsonrpc":"2.0","id":%s,"error":{"code":-32603,"message:"failed to marshal tdx quote: %s"}}`,
+			jrpc.GetID(), err,
+		)))
+		return res
+	}
+
+	res.SetBody([]byte(fmt.Sprintf(
+		`{"jsonrpc":"2.0","id":%s,"result":%s}`,
+		jrpc.GetID(), string(jsonQuote),
+	)))
 
 	return res
 }
