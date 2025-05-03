@@ -89,16 +89,16 @@ func (p *AuthrpcProxy) stop() {
 }
 
 func (p *AuthrpcProxy) triage(body []byte) *triagedRequest {
-	var jrpc types.JrpcCall
+	var call types.JrpcCall
 
 	{ // proxy & don't mirror un-parse-able requests as-is
-		_jrpc := types.JrpcCall_Uint64{}
-		if err_Uint64 := json.Unmarshal(body, &_jrpc); err_Uint64 == nil {
-			jrpc = _jrpc
+		_call := types.JrpcCall_Uint64{}
+		if err_Uint64 := json.Unmarshal(body, &_call); err_Uint64 == nil {
+			call = _call
 		} else {
 			_jrpc := types.JrpcCall_String{}
 			if err_String := json.Unmarshal(body, &_jrpc); err_String == nil {
-				jrpc = _jrpc
+				call = _jrpc
 			} else {
 				p.Proxy.logger.Warn("Failed to parse authrpc call body",
 					zap.Error(errors.Join(err_Uint64, err_String)),
@@ -110,13 +110,13 @@ func (p *AuthrpcProxy) triage(body []byte) *triagedRequest {
 		}
 	}
 
-	switch jrpc.GetMethod() {
+	switch call.GetMethod() {
 	default:
 		// only proxy
 		return &triagedRequest{
 			proxy:      true,
-			jrpcMethod: jrpc.GetMethod(),
-			jrpcID:     jrpc.GetID(),
+			jrpcMethod: call.GetMethod(),
+			jrpcID:     call.GetID(),
 		}
 
 	case "engine_newPayloadV3":
@@ -124,8 +124,8 @@ func (p *AuthrpcProxy) triage(body []byte) *triagedRequest {
 		return &triagedRequest{
 			proxy:      true,
 			mirror:     true,
-			jrpcMethod: jrpc.GetMethod(),
-			jrpcID:     jrpc.GetID(),
+			jrpcMethod: call.GetMethod(),
+			jrpcID:     call.GetID(),
 		}
 
 	case "engine_newPayloadV4":
@@ -133,8 +133,8 @@ func (p *AuthrpcProxy) triage(body []byte) *triagedRequest {
 		return &triagedRequest{
 			proxy:      true,
 			mirror:     true,
-			jrpcMethod: jrpc.GetMethod(),
-			jrpcID:     jrpc.GetID(),
+			jrpcMethod: call.GetMethod(),
+			jrpcID:     call.GetID(),
 		}
 
 	case "miner_setMaxDASize":
@@ -142,8 +142,8 @@ func (p *AuthrpcProxy) triage(body []byte) *triagedRequest {
 		return &triagedRequest{
 			proxy:      true,
 			mirror:     true,
-			jrpcMethod: jrpc.GetMethod(),
-			jrpcID:     jrpc.GetID(),
+			jrpcMethod: call.GetMethod(),
+			jrpcID:     call.GetID(),
 		}
 
 	case "engine_forkchoiceUpdatedV3":
@@ -160,8 +160,8 @@ func (p *AuthrpcProxy) triage(body []byte) *triagedRequest {
 				return &triagedRequest{
 					proxy:      true,
 					mirror:     true,
-					jrpcMethod: jrpc.GetMethod(),
-					jrpcID:     jrpc.GetID(),
+					jrpcMethod: call.GetMethod(),
+					jrpcID:     call.GetID(),
 				}
 			}
 		}
@@ -174,8 +174,8 @@ func (p *AuthrpcProxy) triage(body []byte) *triagedRequest {
 			return &triagedRequest{
 				proxy:      true,
 				mirror:     true,
-				jrpcMethod: jrpc.GetMethod(),
-				jrpcID:     jrpc.GetID(),
+				jrpcMethod: call.GetMethod(),
+				jrpcID:     call.GetID(),
 			}
 		}
 
@@ -193,17 +193,17 @@ func (p *AuthrpcProxy) triage(body []byte) *triagedRequest {
 			)
 
 			return &triagedRequest{
-				jrpcMethod: jrpc.GetMethod(),
-				jrpcID:     jrpc.GetID(),
-				response:   p.interceptEngineForkchoiceUpdatedV3(jrpc, head),
+				jrpcMethod: call.GetMethod(),
+				jrpcID:     call.GetID(),
+				response:   p.interceptEngineForkchoiceUpdatedV3(call, head),
 			}
 		}
 
 		return &triagedRequest{
 			proxy:      true,
 			mirror:     true,
-			jrpcMethod: jrpc.GetMethod(),
-			jrpcID:     jrpc.GetID(),
+			jrpcMethod: call.GetMethod(),
+			jrpcID:     call.GetID(),
 		}
 	}
 }
@@ -223,14 +223,14 @@ func (p *AuthrpcProxy) alreadySeen(headBlockHash, safeBlockHash, finalisedBlockH
 	return false
 }
 
-func (p *AuthrpcProxy) interceptEngineForkchoiceUpdatedV3(jrpc types.JrpcCall, head string) *fasthttp.Response {
+func (p *AuthrpcProxy) interceptEngineForkchoiceUpdatedV3(call types.JrpcCall, head string) *fasthttp.Response {
 	res := fasthttp.AcquireResponse()
 
 	res.SetStatusCode(fasthttp.StatusOK)
 	res.Header.Add("content-type", "application/json; charset=utf-8")
 	res.SetBody([]byte(fmt.Sprintf(
 		`{"jsonrpc":"2.0","id":%s,"result":{"payloadStatus":{"status":"VALID","latestValidHash":"%s"}}}`,
-		jrpc.GetID(), head,
+		call.GetID(), head,
 	)))
 
 	return res

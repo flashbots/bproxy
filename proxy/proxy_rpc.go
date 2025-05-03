@@ -68,7 +68,7 @@ func (p *RpcProxy) Observe(ctx context.Context, o otelapi.Observer) error {
 func (p *RpcProxy) triage(body []byte) *triagedRequest {
 	errs := make([]error, 0)
 
-	{ // uint64
+	{ // jrpc id as `uint64`
 		singleShot := &types.JrpcCall_Uint64{}
 		err := json.Unmarshal(body, singleShot)
 		if err == nil {
@@ -80,15 +80,15 @@ func (p *RpcProxy) triage(body []byte) *triagedRequest {
 		err = json.Unmarshal(body, &batch)
 		if err == nil {
 			_batch := make([]types.JrpcCall, 0, len(batch))
-			for _, jrpc := range batch {
-				_batch = append(_batch, jrpc)
+			for _, call := range batch {
+				_batch = append(_batch, call)
 			}
 			return p.triageBatch(_batch)
 		}
 		errs = append(errs, err)
 	}
 
-	{ // string
+	{ // jrpc id as `string`
 		singleShot := &types.JrpcCall_String{}
 		err := json.Unmarshal(body, singleShot)
 		if err == nil {
@@ -100,8 +100,8 @@ func (p *RpcProxy) triage(body []byte) *triagedRequest {
 		err = json.Unmarshal(body, &batch)
 		if err == nil {
 			_batch := make([]types.JrpcCall, 0, len(batch))
-			for _, jrpc := range batch {
-				_batch = append(_batch, jrpc)
+			for _, call := range batch {
+				_batch = append(_batch, call)
 			}
 			return p.triageBatch(_batch)
 		}
@@ -118,32 +118,32 @@ func (p *RpcProxy) triage(body []byte) *triagedRequest {
 	}
 }
 
-func (p *RpcProxy) triageSingle(jrpc types.JrpcCall) *triagedRequest {
-	if jrpc.GetMethod() == "tee_getDcapQuote" {
+func (p *RpcProxy) triageSingle(call types.JrpcCall) *triagedRequest {
+	if call.GetMethod() == "tee_getDcapQuote" {
 		return &triagedRequest{
-			jrpcMethod: jrpc.GetMethod(),
-			jrpcID:     jrpc.GetID(),
-			response:   p.interceptTeeGetDcapQuote(jrpc),
+			jrpcMethod: call.GetMethod(),
+			jrpcID:     call.GetID(),
+			response:   p.interceptTeeGetDcapQuote(call),
 		}
 	}
 
 	// proxy all non sendRawTX calls, but don't mirror them
-	if jrpc.GetMethod() != "eth_sendRawTransaction" {
+	if call.GetMethod() != "eth_sendRawTransaction" {
 		return &triagedRequest{
 			proxy:      true,
-			jrpcMethod: jrpc.GetMethod(),
-			jrpcID:     jrpc.GetID(),
+			jrpcMethod: call.GetMethod(),
+			jrpcID:     call.GetID(),
 		}
 	}
 
 	res := &triagedRequest{
 		proxy:      true,
 		mirror:     true,
-		jrpcMethod: jrpc.GetMethod(),
-		jrpcID:     jrpc.GetID(),
+		jrpcMethod: call.GetMethod(),
+		jrpcID:     call.GetID(),
 	}
 
-	if from, tx, err := jrpc.DecodeEthSendRawTransaction(); err == nil {
+	if from, tx, err := call.DecodeEthSendRawTransaction(); err == nil {
 		res.transactions = []triagedRequestTx{{
 			From:  &from,
 			To:    tx.To(),
@@ -165,9 +165,9 @@ func (p *RpcProxy) triageBatch(batch []types.JrpcCall) *triagedRequest {
 	}
 
 	methodsSet := make(map[string]struct{}, 0)
-	for _, jrpc := range batch {
-		if _, known := methodsSet[jrpc.GetMethod()]; !known {
-			methodsSet[jrpc.GetMethod()] = struct{}{}
+	for _, call := range batch {
+		if _, known := methodsSet[call.GetMethod()]; !known {
+			methodsSet[call.GetMethod()] = struct{}{}
 		}
 	}
 
@@ -209,7 +209,7 @@ func (p *RpcProxy) triageBatch(batch []types.JrpcCall) *triagedRequest {
 	return res
 }
 
-func (p *RpcProxy) interceptTeeGetDcapQuote(jrpc types.JrpcCall) *fasthttp.Response {
+func (p *RpcProxy) interceptTeeGetDcapQuote(call types.JrpcCall) *fasthttp.Response {
 	res := fasthttp.AcquireResponse()
 
 	res.SetStatusCode(fasthttp.StatusOK)
@@ -219,16 +219,16 @@ func (p *RpcProxy) interceptTeeGetDcapQuote(jrpc types.JrpcCall) *fasthttp.Respo
 	if err != nil {
 		res.SetBody([]byte(fmt.Sprintf(
 			`{"jsonrpc":"2.0","id":%s,"error":{"code":-32043,"message:"not in tdx"}}`,
-			jrpc.GetID(),
+			call.GetID(),
 		)))
 		return res
 	}
 
 	var params []string
-	if err := json.Unmarshal(jrpc.GetParams(), &params); err != nil {
+	if err := json.Unmarshal(call.GetParams(), &params); err != nil {
 		res.SetBody([]byte(fmt.Sprintf(
 			`{"jsonrpc":"2.0","id":%s,"error":{"code":-32602,"message:"invalid report data"}}`,
-			jrpc.GetID(),
+			call.GetID(),
 		)))
 		return res
 	}
@@ -236,7 +236,7 @@ func (p *RpcProxy) interceptTeeGetDcapQuote(jrpc types.JrpcCall) *fasthttp.Respo
 	if len(params) != 1 {
 		res.SetBody([]byte(fmt.Sprintf(
 			`{"jsonrpc":"2.0","id":%s,"error":{"code":-32602,"message:"only 1 parameter expected"}}`,
-			jrpc.GetID(),
+			call.GetID(),
 		)))
 		return res
 	}
@@ -245,7 +245,7 @@ func (p *RpcProxy) interceptTeeGetDcapQuote(jrpc types.JrpcCall) *fasthttp.Respo
 	if err != nil {
 		res.SetBody([]byte(fmt.Sprintf(
 			`{"jsonrpc":"2.0","id":%s,"error":{"code":-32602,"message:"parameter is not a hex string"}}`,
-			jrpc.GetID(),
+			call.GetID(),
 		)))
 		return res
 	}
@@ -253,7 +253,7 @@ func (p *RpcProxy) interceptTeeGetDcapQuote(jrpc types.JrpcCall) *fasthttp.Respo
 	if len(reportData) != 64 {
 		res.SetBody([]byte(fmt.Sprintf(
 			`{"jsonrpc":"2.0","id":%s,"error":{"code":-32602,"message:"parameter is not 64 bytes hex"}}`,
-			jrpc.GetID(),
+			call.GetID(),
 		)))
 		return res
 	}
@@ -262,7 +262,7 @@ func (p *RpcProxy) interceptTeeGetDcapQuote(jrpc types.JrpcCall) *fasthttp.Respo
 	if err != nil {
 		res.SetBody([]byte(fmt.Sprintf(
 			`{"jsonrpc":"2.0","id":%s,"error":{"code":-32043,"message:"failed to get tdx quote: %s"}}`,
-			jrpc.GetID(), err,
+			call.GetID(), err,
 		)))
 		return res
 	}
@@ -271,7 +271,7 @@ func (p *RpcProxy) interceptTeeGetDcapQuote(jrpc types.JrpcCall) *fasthttp.Respo
 	if err != nil {
 		res.SetBody([]byte(fmt.Sprintf(
 			`{"jsonrpc":"2.0","id":%s,"error":{"code":-32603,"message:"failed to decode tdx quote: %s"}}`,
-			jrpc.GetID(), err,
+			call.GetID(), err,
 		)))
 		return res
 	}
@@ -280,7 +280,7 @@ func (p *RpcProxy) interceptTeeGetDcapQuote(jrpc types.JrpcCall) *fasthttp.Respo
 	if quote == nil {
 		res.SetBody([]byte(fmt.Sprintf(
 			`{"jsonrpc":"2.0","id":%s,"error":{"code":-32603,"message:"unknown tdx quote format"}}`,
-			jrpc.GetID(),
+			call.GetID(),
 		)))
 		return res
 	}
@@ -289,14 +289,14 @@ func (p *RpcProxy) interceptTeeGetDcapQuote(jrpc types.JrpcCall) *fasthttp.Respo
 	if err != nil {
 		res.SetBody([]byte(fmt.Sprintf(
 			`{"jsonrpc":"2.0","id":%s,"error":{"code":-32603,"message:"failed to marshal tdx quote: %s"}}`,
-			jrpc.GetID(), err,
+			call.GetID(), err,
 		)))
 		return res
 	}
 
 	res.SetBody([]byte(fmt.Sprintf(
 		`{"jsonrpc":"2.0","id":%s,"result":%s}`,
-		jrpc.GetID(), string(jsonQuote),
+		call.GetID(), string(jsonQuote),
 	)))
 
 	return res
