@@ -14,9 +14,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/flashbots/bproxy/data"
 	"github.com/flashbots/bproxy/logutils"
 	"github.com/flashbots/bproxy/metrics"
-	"github.com/flashbots/bproxy/types"
 
 	"github.com/valyala/fasthttp"
 	"go.opentelemetry.io/otel/attribute"
@@ -38,7 +38,7 @@ type Proxy struct {
 	healthcheck         *fasthttp.Client
 	healthcheckURI      *fasthttp.URI
 	healthcheckTicker   *time.Ticker
-	healthcheckStatuses *types.RingBuffer[bool]
+	healthcheckStatuses *data.RingBuffer[bool]
 	healthcheckDepth    int
 	isHealthy           bool
 
@@ -164,7 +164,7 @@ func newProxy(cfg *Config) (*Proxy, error) {
 			p.cfg.Proxy.HealthcheckThresholdUnhealthy,
 		)
 
-		p.healthcheckStatuses = types.NewRingBuffer[bool](p.healthcheckDepth)
+		p.healthcheckStatuses = data.NewRingBuffer[bool](p.healthcheckDepth)
 
 		p.isHealthy = true
 	}

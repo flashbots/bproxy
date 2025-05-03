@@ -7,7 +7,7 @@ import (
 	"strconv"
 
 	"github.com/ethereum/go-ethereum/common/hexutil"
-	"github.com/flashbots/bproxy/types"
+	"github.com/flashbots/bproxy/jrpc"
 	"github.com/valyala/fasthttp"
 
 	tdxabi "github.com/google/go-tdx-guest/abi"
@@ -69,17 +69,17 @@ func (p *RpcProxy) triage(body []byte) *triagedRequest {
 	errs := make([]error, 0)
 
 	{ // jrpc id as `uint64`
-		singleShot := &types.JrpcCall_Uint64{}
+		singleShot := &jrpc.CallWithIdAsUint64{}
 		err := json.Unmarshal(body, singleShot)
 		if err == nil {
 			return p.triageSingle(singleShot)
 		}
 		errs = append(errs, err)
 
-		batch := []types.JrpcCall_Uint64{}
+		batch := []jrpc.CallWithIdAsUint64{}
 		err = json.Unmarshal(body, &batch)
 		if err == nil {
-			_batch := make([]types.JrpcCall, 0, len(batch))
+			_batch := make([]jrpc.Call, 0, len(batch))
 			for _, call := range batch {
 				_batch = append(_batch, call)
 			}
@@ -89,17 +89,17 @@ func (p *RpcProxy) triage(body []byte) *triagedRequest {
 	}
 
 	{ // jrpc id as `string`
-		singleShot := &types.JrpcCall_String{}
+		singleShot := &jrpc.CallWithIdAsString{}
 		err := json.Unmarshal(body, singleShot)
 		if err == nil {
 			return p.triageSingle(singleShot)
 		}
 		errs = append(errs, err)
 
-		batch := []types.JrpcCall_String{}
+		batch := []jrpc.CallWithIdAsString{}
 		err = json.Unmarshal(body, &batch)
 		if err == nil {
-			_batch := make([]types.JrpcCall, 0, len(batch))
+			_batch := make([]jrpc.Call, 0, len(batch))
 			for _, call := range batch {
 				_batch = append(_batch, call)
 			}
@@ -118,7 +118,7 @@ func (p *RpcProxy) triage(body []byte) *triagedRequest {
 	}
 }
 
-func (p *RpcProxy) triageSingle(call types.JrpcCall) *triagedRequest {
+func (p *RpcProxy) triageSingle(call jrpc.Call) *triagedRequest {
 	if call.GetMethod() == "tee_getDcapQuote" {
 		return &triagedRequest{
 			jrpcMethod: call.GetMethod(),
@@ -159,7 +159,7 @@ func (p *RpcProxy) triageSingle(call types.JrpcCall) *triagedRequest {
 	return res
 }
 
-func (p *RpcProxy) triageBatch(batch []types.JrpcCall) *triagedRequest {
+func (p *RpcProxy) triageBatch(batch []jrpc.Call) *triagedRequest {
 	if len(batch) == 0 {
 		return &triagedRequest{} // no need to proxy empty batches
 	}
@@ -209,7 +209,7 @@ func (p *RpcProxy) triageBatch(batch []types.JrpcCall) *triagedRequest {
 	return res
 }
 
-func (p *RpcProxy) interceptTeeGetDcapQuote(call types.JrpcCall) *fasthttp.Response {
+func (p *RpcProxy) interceptTeeGetDcapQuote(call jrpc.Call) *fasthttp.Response {
 	res := fasthttp.AcquireResponse()
 
 	res.SetStatusCode(fasthttp.StatusOK)

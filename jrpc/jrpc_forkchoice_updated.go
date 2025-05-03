@@ -1,10 +1,10 @@
-package types
+package jrpc
 
-type EngineForkchoiceUpdatedV3 struct {
+type ForkchoiceUpdatedV3 struct {
 	Params []*struct{} `json:"params"`
 }
 
-type EngineForkchoiceUpdatedV3_WithoutExtraPayload struct {
+type ForkchoiceUpdatedV3WithoutExtraParam struct {
 	Params []*struct {
 		HeadBlockHash      string `json:"headBlockHash"`
 		SafeBlockHash      string `json:"safeBlockHash"`
@@ -12,11 +12,11 @@ type EngineForkchoiceUpdatedV3_WithoutExtraPayload struct {
 	} `json:"params"`
 }
 
-func (fcuv3 EngineForkchoiceUpdatedV3) HasExtraPayload() bool {
+func (fcuv3 ForkchoiceUpdatedV3) HasExtraParam() bool {
 	return len(fcuv3.Params) == 2 && fcuv3.Params[0] != nil && fcuv3.Params[1] != nil
 }
 
-func (fcuv3 EngineForkchoiceUpdatedV3_WithoutExtraPayload) BlockHashes() (head, safe, finalized string) {
+func (fcuv3 ForkchoiceUpdatedV3WithoutExtraParam) BlockHashes() (head, safe, finalized string) {
 	for _, p := range fcuv3.Params {
 		if p != nil {
 			return p.HeadBlockHash, p.SafeBlockHash, p.FinalizedBlockHash

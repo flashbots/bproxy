@@ -6,11 +6,9 @@ toolchain go1.23.7
 
 require (
 	github.com/ethereum/go-ethereum v1.15.5
-	github.com/goccy/go-json v0.10.5
 	github.com/google/go-tdx-guest v0.3.1
 	github.com/google/uuid v1.6.0
 	github.com/prometheus/client_golang v1.19.1
-	github.com/stretchr/testify v1.10.0
 	github.com/urfave/cli/v2 v2.27.5
 	github.com/valyala/fasthttp v1.59.0
 	go.opentelemetry.io/otel v1.27.0
@@ -31,7 +29,6 @@ require (
 	github.com/cpuguy83/go-md2man/v2 v2.0.5 // indirect
 	github.com/crate-crypto/go-ipa v0.0.0-20240724233137-53bbb0ceb27a // indirect
 	github.com/crate-crypto/go-kzg-4844 v1.1.0 // indirect
-	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/decred/dcrd/dcrec/secp256k1/v4 v4.0.1 // indirect
 	github.com/ethereum/c-kzg-4844 v1.0.0 // indirect
 	github.com/ethereum/go-verkle v0.2.2 // indirect
@@ -42,7 +39,6 @@ require (
 	github.com/holiman/uint256 v1.3.2 // indirect
 	github.com/klauspost/compress v1.17.11 // indirect
 	github.com/mmcloughlin/addchain v0.4.0 // indirect
-	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/prometheus/client_model v0.6.1 // indirect
 	github.com/prometheus/common v0.54.0 // indirect
 	github.com/prometheus/procfs v0.15.1 // indirect
@@ -56,6 +52,5 @@ require (
 	golang.org/x/sync v0.10.0 // indirect
 	golang.org/x/sys v0.30.0 // indirect
 	google.golang.org/protobuf v1.34.2 // indirect
-	gopkg.in/yaml.v3 v3.0.1 // indirect
 	rsc.io/tmplfunc v0.0.3 // indirect
 )

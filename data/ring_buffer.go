@@ -1,4 +1,4 @@
-package types
+package data
 
 type RingBuffer[T any] struct {
 	buf []T

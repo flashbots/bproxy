@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/flashbots/bproxy/types"
+	"github.com/flashbots/bproxy/jrpc"
 
 	"github.com/valyala/fasthttp"
 	otelapi "go.opentelemetry.io/otel/metric"
@@ -89,14 +89,14 @@ func (p *AuthrpcProxy) stop() {
 }
 
 func (p *AuthrpcProxy) triage(body []byte) *triagedRequest {
-	var call types.JrpcCall
+	var call jrpc.Call
 
 	{ // proxy & don't mirror un-parse-able requests as-is
-		_call := types.JrpcCall_Uint64{}
+		_call := jrpc.CallWithIdAsUint64{}
 		if err_Uint64 := json.Unmarshal(body, &_call); err_Uint64 == nil {
 			call = _call
 		} else {
-			_jrpc := types.JrpcCall_String{}
+			_jrpc := jrpc.CallWithIdAsString{}
 			if err_String := json.Unmarshal(body, &_jrpc); err_String == nil {
 				call = _jrpc
 			} else {
@@ -148,7 +148,7 @@ func (p *AuthrpcProxy) triage(body []byte) *triagedRequest {
 
 	case "engine_forkchoiceUpdatedV3":
 		{ // proxy & mirror FCUv3 with extra attributes (or FCUv3 we can't parse)
-			fcuv3 := types.EngineForkchoiceUpdatedV3{}
+			fcuv3 := jrpc.ForkchoiceUpdatedV3{}
 			err := json.Unmarshal(body, &fcuv3)
 			if err != nil {
 				p.Proxy.logger.Warn("Failed to parse FCUv3 call body",
@@ -156,7 +156,7 @@ func (p *AuthrpcProxy) triage(body []byte) *triagedRequest {
 				)
 			}
 
-			if err != nil || fcuv3.HasExtraPayload() {
+			if err != nil || fcuv3.HasExtraParam() {
 				return &triagedRequest{
 					proxy:      true,
 					mirror:     true,
@@ -166,7 +166,7 @@ func (p *AuthrpcProxy) triage(body []byte) *triagedRequest {
 			}
 		}
 
-		fcuv3 := types.EngineForkchoiceUpdatedV3_WithoutExtraPayload{}
+		fcuv3 := jrpc.ForkchoiceUpdatedV3WithoutExtraParam{}
 		if err := json.Unmarshal(body, &fcuv3); err != nil {
 			p.Proxy.logger.Warn("Failed to parse call body of FCUv3 w/o extra attributes",
 				zap.Error(err),
@@ -223,7 +223,7 @@ func (p *AuthrpcProxy) alreadySeen(headBlockHash, safeBlockHash, finalisedBlockH
 	return false
 }
 
-func (p *AuthrpcProxy) interceptEngineForkchoiceUpdatedV3(call types.JrpcCall, head string) *fasthttp.Response {
+func (p *AuthrpcProxy) interceptEngineForkchoiceUpdatedV3(call jrpc.Call, head string) *fasthttp.Response {
 	res := fasthttp.AcquireResponse()
 
 	res.SetStatusCode(fasthttp.StatusOK)
