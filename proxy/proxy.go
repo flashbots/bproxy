@@ -17,6 +17,7 @@ import (
 	"github.com/flashbots/bproxy/data"
 	"github.com/flashbots/bproxy/logutils"
 	"github.com/flashbots/bproxy/metrics"
+	"github.com/flashbots/bproxy/triaged"
 
 	"github.com/valyala/fasthttp"
 	"go.opentelemetry.io/otel/attribute"
@@ -44,7 +45,7 @@ type Proxy struct {
 
 	logger *zap.Logger
 
-	triage func(body []byte) *triagedRequest
+	triage func(body []byte) *triaged.Request
 	run    func()
 	stop   func()
 
@@ -67,7 +68,7 @@ func newProxy(cfg *Config) (*Proxy, error) {
 
 	p.frontend = &fasthttp.Server{
 		ConnState:          p.upstreamConnectionChanged,
-		Handler:            p.handle,
+		Handler:            p.receive,
 		IdleTimeout:        30 * time.Second,
 		Logger:             logutils.FasthttpLogger(l),
 		MaxConnsPerIP:      cfg.Proxy.MaxClientConnectionsPerIP,
@@ -289,11 +290,11 @@ func (p *Proxy) Observe(ctx context.Context, o otelapi.Observer) error {
 	return nil
 }
 
-func (p *Proxy) defaultTriage(body []byte) *triagedRequest {
-	return &triagedRequest{}
+func (p *Proxy) defaultTriage(body []byte) *triaged.Request {
+	return &triaged.Request{}
 }
 
-func (p *Proxy) handle(ctx *fasthttp.RequestCtx) {
+func (p *Proxy) receive(ctx *fasthttp.RequestCtx) {
 	var (
 		tsReqReceived = time.Now()
 
@@ -313,7 +314,7 @@ func (p *Proxy) handle(ctx *fasthttp.RequestCtx) {
 		attribute.KeyValue{Key: "content_encoding", Value: attribute.StringValue(str(ctx.Request.Header.ContentEncoding()))},
 	))
 
-	call := p.triage(ctx.Request.Body())
+	triage := p.triage(ctx.Request.Body())
 
 	{ // setup
 		req = fasthttp.AcquireRequest()
@@ -330,8 +331,8 @@ func (p *Proxy) handle(ctx *fasthttp.RequestCtx) {
 
 		{ // configure processing mode (proxy, fake, chaos)
 			if p.extraMirroredJrpcMethods != nil {
-				_, mirror := p.extraMirroredJrpcMethods[call.jrpcMethod]
-				call.mirror = call.mirror || mirror
+				_, mirror := p.extraMirroredJrpcMethods[triage.JrpcMethod]
+				triage.Mirror = triage.Mirror || mirror
 			}
 
 			if p.cfg.Chaos.Enabled {
@@ -341,8 +342,8 @@ func (p *Proxy) handle(ctx *fasthttp.RequestCtx) {
 
 				if injectHttpError || injectJrpcError || injectBadJrpcResponse {
 					res = fasthttp.AcquireResponse()
-					call.proxy = false
-					call.mirror = false
+					triage.Proxy = false
+					triage.Mirror = false
 				}
 
 				switch {
@@ -352,7 +353,7 @@ func (p *Proxy) handle(ctx *fasthttp.RequestCtx) {
 						zap.Bool("chaos_http_error", true),
 					)
 				case injectJrpcError:
-					proxy = p.injectJrpcError(call, req, res)
+					proxy = p.injectJrpcError(triage, req, res)
 					loggedFields = append(loggedFields,
 						zap.Bool("chaos_jrpc_error", true),
 					)
@@ -365,11 +366,11 @@ func (p *Proxy) handle(ctx *fasthttp.RequestCtx) {
 			}
 
 			if res == nil { // are not injecting chaos
-				if call.proxy { // will proxy
+				if triage.Proxy { // will proxy
 					res = fasthttp.AcquireResponse()
 					proxy = p.backend.Do
 				} else { // will fake
-					res = call.response
+					res = triage.Response
 					proxy = func(_ *fasthttp.Request, _ *fasthttp.Response) error { return nil }
 				}
 			}
@@ -379,24 +380,24 @@ func (p *Proxy) handle(ctx *fasthttp.RequestCtx) {
 
 		loggedFields = append(loggedFields,
 			zap.Time("ts_request_received", tsReqReceived),
-			zap.Bool("proxy", call.proxy),
-			zap.Bool("mirror", call.mirror),
+			zap.Bool("proxy", triage.Proxy),
+			zap.Bool("mirror", triage.Mirror),
 			zap.Uint64("connection_id", ctx.ConnID()),
 			zap.String("remote_addr", ctx.RemoteAddr().String()),
 			zap.String("downstream_host", str(p.backendURI.Host())),
-			zap.String("jrpc_method", call.jrpcMethod),
+			zap.String("jrpc_method", triage.JrpcMethod),
 		)
 
-		if len(call.transactions) > 0 {
+		if len(triage.Transactions) > 0 {
 			loggedFields = append(loggedFields,
-				zap.Array("txs", call.transactions),
+				zap.Array("txs", triage.Transactions),
 			)
 		}
 
 		l = p.logger.With(loggedFields...)
 
-		jrpcMethodForMetrics = call.jrpcMethod
-		if call.mirror {
+		jrpcMethodForMetrics = triage.JrpcMethod
+		if triage.Mirror {
 			jrpcMethodForMetrics += "+"
 		}
 	}
@@ -519,7 +520,7 @@ func (p *Proxy) handle(ctx *fasthttp.RequestCtx) {
 		if !success {
 			l.Error("Failed to proxy the request", loggedFields...)
 			metrics.ProxyFailureCount.Add(context.TODO(), 1, metricAttributes)
-		} else if call.proxy {
+		} else if triage.Proxy {
 			l.Info("Proxied the request", loggedFields...)
 			metrics.ProxySuccessCount.Add(context.TODO(), 1, metricAttributes)
 		} else {
@@ -528,7 +529,7 @@ func (p *Proxy) handle(ctx *fasthttp.RequestCtx) {
 		}
 	}()
 
-	if call.mirror {
+	if triage.Mirror {
 		for _, uri := range p.peerURIs {
 			req := fasthttp.AcquireRequest()
 			res := fasthttp.AcquireResponse()
@@ -663,14 +664,14 @@ func (p *Proxy) injectHttpError(_ *fasthttp.Request, res *fasthttp.Response) err
 }
 
 func (p *Proxy) injectJrpcError(
-	call *triagedRequest, _ *fasthttp.Request, _ *fasthttp.Response,
+	call *triaged.Request, _ *fasthttp.Request, _ *fasthttp.Response,
 ) func(_ *fasthttp.Request, _ *fasthttp.Response) error {
 	return func(_ *fasthttp.Request, res *fasthttp.Response) error {
 		res.SetStatusCode(fasthttp.StatusOK)
 		res.Header.Add("content-type", "application/json; charset=utf-8")
 		res.SetBody([]byte(fmt.Sprintf(
 			`{"jsonrpc":"2.0","id":%s,"error":{"code":-32042,"message:"chaos-injected error"}}`,
-			call.jrpcID,
+			call.JrpcID,
 		)))
 
 		return nil

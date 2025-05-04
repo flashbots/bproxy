@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/flashbots/bproxy/jrpc"
+	"github.com/flashbots/bproxy/triaged"
 
 	"github.com/valyala/fasthttp"
 	otelapi "go.opentelemetry.io/otel/metric"
@@ -88,7 +89,7 @@ func (p *AuthrpcProxy) stop() {
 	p.tickerSeenHeads.Stop()
 }
 
-func (p *AuthrpcProxy) triage(body []byte) *triagedRequest {
+func (p *AuthrpcProxy) triage(body []byte) *triaged.Request {
 	var call jrpc.Call
 
 	{ // proxy & don't mirror un-parse-able requests as-is
@@ -103,8 +104,8 @@ func (p *AuthrpcProxy) triage(body []byte) *triagedRequest {
 				p.Proxy.logger.Warn("Failed to parse authrpc call body",
 					zap.Error(errors.Join(err_Uint64, err_String)),
 				)
-				return &triagedRequest{
-					proxy: true,
+				return &triaged.Request{
+					Proxy: true,
 				}
 			}
 		}
@@ -113,37 +114,37 @@ func (p *AuthrpcProxy) triage(body []byte) *triagedRequest {
 	switch call.GetMethod() {
 	default:
 		// only proxy
-		return &triagedRequest{
-			proxy:      true,
-			jrpcMethod: call.GetMethod(),
-			jrpcID:     call.GetID(),
+		return &triaged.Request{
+			Proxy:      true,
+			JrpcMethod: call.GetMethod(),
+			JrpcID:     call.GetID(),
 		}
 
 	case "engine_newPayloadV3":
 		// proxy & mirror
-		return &triagedRequest{
-			proxy:      true,
-			mirror:     true,
-			jrpcMethod: call.GetMethod(),
-			jrpcID:     call.GetID(),
+		return &triaged.Request{
+			Proxy:      true,
+			Mirror:     true,
+			JrpcMethod: call.GetMethod(),
+			JrpcID:     call.GetID(),
 		}
 
 	case "engine_newPayloadV4":
 		// proxy & mirror
-		return &triagedRequest{
-			proxy:      true,
-			mirror:     true,
-			jrpcMethod: call.GetMethod(),
-			jrpcID:     call.GetID(),
+		return &triaged.Request{
+			Proxy:      true,
+			Mirror:     true,
+			JrpcMethod: call.GetMethod(),
+			JrpcID:     call.GetID(),
 		}
 
 	case "miner_setMaxDASize":
 		// proxy & mirror
-		return &triagedRequest{
-			proxy:      true,
-			mirror:     true,
-			jrpcMethod: call.GetMethod(),
-			jrpcID:     call.GetID(),
+		return &triaged.Request{
+			Proxy:      true,
+			Mirror:     true,
+			JrpcMethod: call.GetMethod(),
+			JrpcID:     call.GetID(),
 		}
 
 	case "engine_forkchoiceUpdatedV3":
@@ -157,11 +158,11 @@ func (p *AuthrpcProxy) triage(body []byte) *triagedRequest {
 			}
 
 			if err != nil || fcuv3.HasExtraParam() {
-				return &triagedRequest{
-					proxy:      true,
-					mirror:     true,
-					jrpcMethod: call.GetMethod(),
-					jrpcID:     call.GetID(),
+				return &triaged.Request{
+					Proxy:      true,
+					Mirror:     true,
+					JrpcMethod: call.GetMethod(),
+					JrpcID:     call.GetID(),
 				}
 			}
 		}
@@ -171,11 +172,11 @@ func (p *AuthrpcProxy) triage(body []byte) *triagedRequest {
 			p.Proxy.logger.Warn("Failed to parse call body of FCUv3 w/o extra attributes",
 				zap.Error(err),
 			)
-			return &triagedRequest{
-				proxy:      true,
-				mirror:     true,
-				jrpcMethod: call.GetMethod(),
-				jrpcID:     call.GetID(),
+			return &triaged.Request{
+				Proxy:      true,
+				Mirror:     true,
+				JrpcMethod: call.GetMethod(),
+				JrpcID:     call.GetID(),
 			}
 		}
 
@@ -192,18 +193,18 @@ func (p *AuthrpcProxy) triage(body []byte) *triagedRequest {
 				zap.String("finalised", finalised),
 			)
 
-			return &triagedRequest{
-				jrpcMethod: call.GetMethod(),
-				jrpcID:     call.GetID(),
-				response:   p.interceptEngineForkchoiceUpdatedV3(call, head),
+			return &triaged.Request{
+				JrpcMethod: call.GetMethod(),
+				JrpcID:     call.GetID(),
+				Response:   p.interceptEngineForkchoiceUpdatedV3(call, head),
 			}
 		}
 
-		return &triagedRequest{
-			proxy:      true,
-			mirror:     true,
-			jrpcMethod: call.GetMethod(),
-			jrpcID:     call.GetID(),
+		return &triaged.Request{
+			Proxy:      true,
+			Mirror:     true,
+			JrpcMethod: call.GetMethod(),
+			JrpcID:     call.GetID(),
 		}
 	}
 }

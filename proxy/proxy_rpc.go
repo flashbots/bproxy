@@ -8,6 +8,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/flashbots/bproxy/jrpc"
+	"github.com/flashbots/bproxy/triaged"
 	"github.com/valyala/fasthttp"
 
 	tdxabi "github.com/google/go-tdx-guest/abi"
@@ -65,7 +66,7 @@ func (p *RpcProxy) Observe(ctx context.Context, o otelapi.Observer) error {
 	return p.Proxy.Observe(ctx, o)
 }
 
-func (p *RpcProxy) triage(body []byte) *triagedRequest {
+func (p *RpcProxy) triage(body []byte) *triaged.Request {
 	errs := make([]error, 0)
 
 	{ // jrpc id as `uint64`
@@ -113,38 +114,38 @@ func (p *RpcProxy) triage(body []byte) *triagedRequest {
 	)
 
 	// proxy un-parse-able requests as-is, but don't mirror them
-	return &triagedRequest{
-		proxy: true,
+	return &triaged.Request{
+		Proxy: true,
 	}
 }
 
-func (p *RpcProxy) triageSingle(call jrpc.Call) *triagedRequest {
+func (p *RpcProxy) triageSingle(call jrpc.Call) *triaged.Request {
 	if call.GetMethod() == "tee_getDcapQuote" {
-		return &triagedRequest{
-			jrpcMethod: call.GetMethod(),
-			jrpcID:     call.GetID(),
-			response:   p.interceptTeeGetDcapQuote(call),
+		return &triaged.Request{
+			JrpcMethod: call.GetMethod(),
+			JrpcID:     call.GetID(),
+			Response:   p.interceptTeeGetDcapQuote(call),
 		}
 	}
 
 	// proxy all non sendRawTX calls, but don't mirror them
 	if call.GetMethod() != "eth_sendRawTransaction" {
-		return &triagedRequest{
-			proxy:      true,
-			jrpcMethod: call.GetMethod(),
-			jrpcID:     call.GetID(),
+		return &triaged.Request{
+			Proxy:      true,
+			JrpcMethod: call.GetMethod(),
+			JrpcID:     call.GetID(),
 		}
 	}
 
-	res := &triagedRequest{
-		proxy:      true,
-		mirror:     true,
-		jrpcMethod: call.GetMethod(),
-		jrpcID:     call.GetID(),
+	res := &triaged.Request{
+		Proxy:      true,
+		Mirror:     true,
+		JrpcMethod: call.GetMethod(),
+		JrpcID:     call.GetID(),
 	}
 
 	if from, tx, err := call.DecodeEthSendRawTransaction(); err == nil {
-		res.transactions = []triagedRequestTx{{
+		res.Transactions = triaged.RequestTransactions{{
 			From:  &from,
 			To:    tx.To(),
 			Hash:  tx.Hash(),
@@ -159,9 +160,9 @@ func (p *RpcProxy) triageSingle(call jrpc.Call) *triagedRequest {
 	return res
 }
 
-func (p *RpcProxy) triageBatch(batch []jrpc.Call) *triagedRequest {
+func (p *RpcProxy) triageBatch(batch []jrpc.Call) *triaged.Request {
 	if len(batch) == 0 {
-		return &triagedRequest{} // no need to proxy empty batches
+		return &triaged.Request{} // no need to proxy empty batches
 	}
 
 	methodsSet := make(map[string]struct{}, 0)
@@ -173,19 +174,19 @@ func (p *RpcProxy) triageBatch(batch []jrpc.Call) *triagedRequest {
 
 	// proxy all non sendRawTX calls, but don't mirror them
 	if _, hasEthSendRawTx := methodsSet["eth_sendRawTransaction"]; !hasEthSendRawTx {
-		return &triagedRequest{
-			proxy:      true,
-			jrpcMethod: "batch(" + strconv.Itoa(len(batch)) + ")",
-			jrpcID:     batch[0].GetID(),
+		return &triaged.Request{
+			Proxy:      true,
+			JrpcMethod: "batch(" + strconv.Itoa(len(batch)) + ")",
+			JrpcID:     batch[0].GetID(),
 		}
 	}
 
-	res := &triagedRequest{
-		proxy:        true,
-		mirror:       true,
-		jrpcMethod:   "batch(" + strconv.Itoa(len(batch)) + ")",
-		jrpcID:       batch[0].GetID(),
-		transactions: make([]triagedRequestTx, 0),
+	res := &triaged.Request{
+		Proxy:        true,
+		Mirror:       true,
+		JrpcMethod:   "batch(" + strconv.Itoa(len(batch)) + ")",
+		JrpcID:       batch[0].GetID(),
+		Transactions: make(triaged.RequestTransactions, 0),
 	}
 
 	for _, call := range batch {
@@ -193,7 +194,7 @@ func (p *RpcProxy) triageBatch(batch []jrpc.Call) *triagedRequest {
 			continue
 		}
 		if from, tx, err := call.DecodeEthSendRawTransaction(); err == nil {
-			res.transactions = append(res.transactions, triagedRequestTx{
+			res.Transactions = append(res.Transactions, triaged.RequestTransaction{
 				From:  &from,
 				To:    tx.To(),
 				Hash:  tx.Hash(),

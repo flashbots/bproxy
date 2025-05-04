@@ -1,32 +1,21 @@
-package proxy
+package triaged
 
 import (
-	"github.com/valyala/fasthttp"
 	"go.uber.org/zap/zapcore"
 
 	ethcommon "github.com/ethereum/go-ethereum/common"
 )
 
-type triagedRequest struct {
-	proxy  bool
-	mirror bool
+type RequestTransactions []RequestTransaction
 
-	jrpcMethod string
-	jrpcID     string
-
-	response *fasthttp.Response
-
-	transactions triagedRequestTxs
-}
-
-type triagedRequestTx struct {
+type RequestTransaction struct {
 	From  *ethcommon.Address
 	To    *ethcommon.Address
 	Hash  ethcommon.Hash
 	Nonce uint64
 }
 
-func (tx triagedRequestTx) MarshalLogObject(e zapcore.ObjectEncoder) error {
+func (tx RequestTransaction) MarshalLogObject(e zapcore.ObjectEncoder) error {
 	if tx.From != nil {
 		e.AddString("from", tx.From.String())
 	}
@@ -38,9 +27,7 @@ func (tx triagedRequestTx) MarshalLogObject(e zapcore.ObjectEncoder) error {
 	return nil
 }
 
-type triagedRequestTxs []triagedRequestTx
-
-func (txs triagedRequestTxs) MarshalLogArray(e zapcore.ArrayEncoder) error {
+func (txs RequestTransactions) MarshalLogArray(e zapcore.ArrayEncoder) error {
 	for _, tx := range txs {
 		if err := e.AppendObject(tx); err != nil {
 			return err
