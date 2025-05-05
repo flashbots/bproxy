@@ -66,7 +66,7 @@ func (p *RpcProxy) Observe(ctx context.Context, o otelapi.Observer) error {
 	return p.Proxy.Observe(ctx, o)
 }
 
-func (p *RpcProxy) triage(body []byte) *triaged.Request {
+func (p *RpcProxy) triage(body []byte) (*triaged.Request, *fasthttp.Response) {
 	errs := make([]error, 0)
 
 	{ // jrpc id as `uint64`
@@ -116,16 +116,15 @@ func (p *RpcProxy) triage(body []byte) *triaged.Request {
 	// proxy un-parse-able requests as-is, but don't mirror them
 	return &triaged.Request{
 		Proxy: true,
-	}
+	}, fasthttp.AcquireResponse()
 }
 
-func (p *RpcProxy) triageSingle(call jrpc.Call) *triaged.Request {
+func (p *RpcProxy) triageSingle(call jrpc.Call) (*triaged.Request, *fasthttp.Response) {
 	if call.GetMethod() == "tee_getDcapQuote" {
 		return &triaged.Request{
 			JrpcMethod: call.GetMethod(),
 			JrpcID:     call.GetID(),
-			Response:   p.interceptTeeGetDcapQuote(call),
-		}
+		}, p.interceptTeeGetDcapQuote(call)
 	}
 
 	// proxy all non sendRawTX calls, but don't mirror them
@@ -134,7 +133,7 @@ func (p *RpcProxy) triageSingle(call jrpc.Call) *triaged.Request {
 			Proxy:      true,
 			JrpcMethod: call.GetMethod(),
 			JrpcID:     call.GetID(),
-		}
+		}, fasthttp.AcquireResponse()
 	}
 
 	res := &triaged.Request{
@@ -157,12 +156,13 @@ func (p *RpcProxy) triageSingle(call jrpc.Call) *triaged.Request {
 		)
 	}
 
-	return res
+	return res, fasthttp.AcquireResponse()
 }
 
-func (p *RpcProxy) triageBatch(batch []jrpc.Call) *triaged.Request {
+func (p *RpcProxy) triageBatch(batch []jrpc.Call) (*triaged.Request, *fasthttp.Response) {
 	if len(batch) == 0 {
-		return &triaged.Request{} // no need to proxy empty batches
+		// no need to proxy empty batches
+		return &triaged.Request{}, fasthttp.AcquireResponse()
 	}
 
 	methodsSet := make(map[string]struct{}, 0)
@@ -178,7 +178,7 @@ func (p *RpcProxy) triageBatch(batch []jrpc.Call) *triaged.Request {
 			Proxy:      true,
 			JrpcMethod: "batch(" + strconv.Itoa(len(batch)) + ")",
 			JrpcID:     batch[0].GetID(),
-		}
+		}, fasthttp.AcquireResponse()
 	}
 
 	res := &triaged.Request{
@@ -207,7 +207,7 @@ func (p *RpcProxy) triageBatch(batch []jrpc.Call) *triaged.Request {
 		}
 	}
 
-	return res
+	return res, fasthttp.AcquireResponse()
 }
 
 func (p *RpcProxy) interceptTeeGetDcapQuote(call jrpc.Call) *fasthttp.Response {

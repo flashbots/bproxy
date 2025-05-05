@@ -89,7 +89,7 @@ func (p *AuthrpcProxy) stop() {
 	p.tickerSeenHeads.Stop()
 }
 
-func (p *AuthrpcProxy) triage(body []byte) *triaged.Request {
+func (p *AuthrpcProxy) triage(body []byte) (*triaged.Request, *fasthttp.Response) {
 	var call jrpc.Call
 
 	{ // proxy & don't mirror un-parse-able requests as-is
@@ -106,7 +106,7 @@ func (p *AuthrpcProxy) triage(body []byte) *triaged.Request {
 				)
 				return &triaged.Request{
 					Proxy: true,
-				}
+				}, fasthttp.AcquireResponse()
 			}
 		}
 	}
@@ -118,7 +118,7 @@ func (p *AuthrpcProxy) triage(body []byte) *triaged.Request {
 			Proxy:      true,
 			JrpcMethod: call.GetMethod(),
 			JrpcID:     call.GetID(),
-		}
+		}, fasthttp.AcquireResponse()
 
 	case "engine_newPayloadV3":
 		// proxy & mirror
@@ -127,7 +127,7 @@ func (p *AuthrpcProxy) triage(body []byte) *triaged.Request {
 			Mirror:     true,
 			JrpcMethod: call.GetMethod(),
 			JrpcID:     call.GetID(),
-		}
+		}, fasthttp.AcquireResponse()
 
 	case "engine_newPayloadV4":
 		// proxy & mirror
@@ -136,7 +136,7 @@ func (p *AuthrpcProxy) triage(body []byte) *triaged.Request {
 			Mirror:     true,
 			JrpcMethod: call.GetMethod(),
 			JrpcID:     call.GetID(),
-		}
+		}, fasthttp.AcquireResponse()
 
 	case "miner_setMaxDASize":
 		// proxy & mirror
@@ -145,7 +145,7 @@ func (p *AuthrpcProxy) triage(body []byte) *triaged.Request {
 			Mirror:     true,
 			JrpcMethod: call.GetMethod(),
 			JrpcID:     call.GetID(),
-		}
+		}, fasthttp.AcquireResponse()
 
 	case "engine_forkchoiceUpdatedV3":
 		{ // proxy & mirror FCUv3 with extra attributes (or FCUv3 we can't parse)
@@ -163,7 +163,7 @@ func (p *AuthrpcProxy) triage(body []byte) *triaged.Request {
 					Mirror:     true,
 					JrpcMethod: call.GetMethod(),
 					JrpcID:     call.GetID(),
-				}
+				}, fasthttp.AcquireResponse()
 			}
 		}
 
@@ -177,7 +177,7 @@ func (p *AuthrpcProxy) triage(body []byte) *triaged.Request {
 				Mirror:     true,
 				JrpcMethod: call.GetMethod(),
 				JrpcID:     call.GetID(),
-			}
+			}, fasthttp.AcquireResponse()
 		}
 
 		//
@@ -196,8 +196,7 @@ func (p *AuthrpcProxy) triage(body []byte) *triaged.Request {
 			return &triaged.Request{
 				JrpcMethod: call.GetMethod(),
 				JrpcID:     call.GetID(),
-				Response:   p.interceptEngineForkchoiceUpdatedV3(call, head),
-			}
+			}, p.interceptEngineForkchoiceUpdatedV3(call, head)
 		}
 
 		return &triaged.Request{
@@ -205,7 +204,7 @@ func (p *AuthrpcProxy) triage(body []byte) *triaged.Request {
 			Mirror:     true,
 			JrpcMethod: call.GetMethod(),
 			JrpcID:     call.GetID(),
-		}
+		}, fasthttp.AcquireResponse()
 	}
 }
 

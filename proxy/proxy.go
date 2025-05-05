@@ -45,7 +45,7 @@ type Proxy struct {
 
 	logger *zap.Logger
 
-	triage func(body []byte) *triaged.Request
+	triage func(body []byte) (*triaged.Request, *fasthttp.Response)
 	run    func()
 	stop   func()
 
@@ -64,7 +64,9 @@ func newProxy(cfg *Config) (*Proxy, error) {
 		drainingConnections: make(map[string]net.Conn),
 	}
 
-	p.triage = p.defaultTriage
+	p.triage = func(body []byte) (*triaged.Request, *fasthttp.Response) {
+		return &triaged.Request{}, fasthttp.AcquireResponse()
+	}
 
 	p.frontend = &fasthttp.Server{
 		ConnState:          p.upstreamConnectionChanged,
@@ -290,10 +292,6 @@ func (p *Proxy) Observe(ctx context.Context, o otelapi.Observer) error {
 	return nil
 }
 
-func (p *Proxy) defaultTriage(body []byte) *triaged.Request {
-	return &triaged.Request{}
-}
-
 func (p *Proxy) receive(ctx *fasthttp.RequestCtx) {
 	var (
 		tsReqReceived = time.Now()
@@ -301,8 +299,9 @@ func (p *Proxy) receive(ctx *fasthttp.RequestCtx) {
 		l  *zap.Logger
 		wg sync.WaitGroup
 
-		req *fasthttp.Request
-		res *fasthttp.Response
+		req    *fasthttp.Request
+		res    *fasthttp.Response
+		triage *triaged.Request
 
 		proxy func(req *fasthttp.Request, res *fasthttp.Response) error
 
@@ -314,7 +313,8 @@ func (p *Proxy) receive(ctx *fasthttp.RequestCtx) {
 		attribute.KeyValue{Key: "content_encoding", Value: attribute.StringValue(str(ctx.Request.Header.ContentEncoding()))},
 	))
 
-	triage := p.triage(ctx.Request.Body())
+	triage, res = p.triage(ctx.Request.Body())
+	defer fasthttp.ReleaseResponse(res)
 
 	{ // setup
 		req = fasthttp.AcquireRequest()
@@ -341,7 +341,6 @@ func (p *Proxy) receive(ctx *fasthttp.RequestCtx) {
 				injectBadJrpcResponse := rand.Float64() < p.cfg.Chaos.InjectedInvalidJrpcResponseProbability/100
 
 				if injectHttpError || injectJrpcError || injectBadJrpcResponse {
-					res = fasthttp.AcquireResponse()
 					triage.Proxy = false
 					triage.Mirror = false
 				}
@@ -365,17 +364,13 @@ func (p *Proxy) receive(ctx *fasthttp.RequestCtx) {
 				}
 			}
 
-			if res == nil { // are not injecting chaos
+			if proxy == nil { // are not injecting chaos
 				if triage.Proxy { // will proxy
-					res = fasthttp.AcquireResponse()
 					proxy = p.backend.Do
 				} else { // will fake
-					res = triage.Response
 					proxy = func(_ *fasthttp.Request, _ *fasthttp.Response) error { return nil }
 				}
 			}
-
-			defer fasthttp.ReleaseResponse(res)
 		}
 
 		loggedFields = append(loggedFields,
