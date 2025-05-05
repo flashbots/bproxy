@@ -292,337 +292,135 @@ func (p *Proxy) Observe(ctx context.Context, o otelapi.Observer) error {
 	return nil
 }
 
-func (p *Proxy) receive(ctx *fasthttp.RequestCtx) {
-	var (
-		tsReqReceived = time.Now()
+func (p *Proxy) newJobProxy(ctx *fasthttp.RequestCtx) *jobProxy {
+	job := &jobProxy{
+		tsReqReceived: time.Now(),
+		wg:            &sync.WaitGroup{},
+	}
 
-		l  *zap.Logger
-		wg sync.WaitGroup
+	job.triage, job.res = p.triage(ctx.Request.Body())
 
-		req    *fasthttp.Request
-		res    *fasthttp.Response
-		triage *triaged.Request
+	{ // prepare the request
+		job.req = fasthttp.AcquireRequest()
 
-		proxy func(req *fasthttp.Request, res *fasthttp.Response) error
+		ctx.Request.CopyTo(job.req)
+		job.req.SetTimeout(p.cfg.Proxy.BackendTimeout)
+		job.req.SetURI(p.backendURI)
+		job.req.Header.Add("x-forwarded-for", ctx.RemoteIP().String())
+		job.req.Header.Add("x-forwarded-host", str(ctx.Host()))
+		job.req.Header.Add("x-forwarded-proto", str(ctx.Request.URI().Scheme()))
+	}
 
-		jrpcMethodForMetrics string
-	)
+	loggedFields := make([]zap.Field, 0, 12)
 
-	triage, res = p.triage(ctx.Request.Body())
-	defer fasthttp.ReleaseResponse(res)
-
-	{ // setup
-		{ // prepare the request
-			req = fasthttp.AcquireRequest()
-			defer fasthttp.ReleaseRequest(req)
-
-			ctx.Request.CopyTo(req)
-			req.SetTimeout(p.cfg.Proxy.BackendTimeout)
-			req.SetURI(p.backendURI)
-			req.Header.Add("x-forwarded-for", ctx.RemoteIP().String())
-			req.Header.Add("x-forwarded-host", str(ctx.Host()))
-			req.Header.Add("x-forwarded-proto", str(ctx.Request.URI().Scheme()))
+	{ // configure processing mode (proxy, fake, chaos)
+		if p.extraMirroredJrpcMethods != nil {
+			_, mirror := p.extraMirroredJrpcMethods[job.triage.JrpcMethod]
+			job.triage.Mirror = job.triage.Mirror || mirror
 		}
 
-		loggedFields := make([]zap.Field, 0, 12)
+		if p.cfg.Chaos.Enabled {
+			injectHttpError := rand.Float64() < p.cfg.Chaos.InjectedHttpErrorProbability/100
+			injectJrpcError := rand.Float64() < p.cfg.Chaos.InjectedJrpcErrorProbability/100
+			injectBadJrpcResponse := rand.Float64() < p.cfg.Chaos.InjectedInvalidJrpcResponseProbability/100
 
-		{ // configure processing mode (proxy, fake, chaos)
-			if p.extraMirroredJrpcMethods != nil {
-				_, mirror := p.extraMirroredJrpcMethods[triage.JrpcMethod]
-				triage.Mirror = triage.Mirror || mirror
+			if injectHttpError || injectJrpcError || injectBadJrpcResponse {
+				job.triage.Proxy = false
+				job.triage.Mirror = false
 			}
 
-			if p.cfg.Chaos.Enabled {
-				injectHttpError := rand.Float64() < p.cfg.Chaos.InjectedHttpErrorProbability/100
-				injectJrpcError := rand.Float64() < p.cfg.Chaos.InjectedJrpcErrorProbability/100
-				injectBadJrpcResponse := rand.Float64() < p.cfg.Chaos.InjectedInvalidJrpcResponseProbability/100
-
-				if injectHttpError || injectJrpcError || injectBadJrpcResponse {
-					triage.Proxy = false
-					triage.Mirror = false
-				}
-
-				switch {
-				case injectHttpError:
-					proxy = p.injectHttpError
-					loggedFields = append(loggedFields,
-						zap.Bool("chaos_http_error", true),
-					)
-				case injectJrpcError:
-					proxy = p.injectJrpcError(triage, req, res)
-					loggedFields = append(loggedFields,
-						zap.Bool("chaos_jrpc_error", true),
-					)
-				case injectBadJrpcResponse:
-					proxy = p.injectInvalidJrpcResponse
-					loggedFields = append(loggedFields,
-						zap.Bool("chaos_invalid_jrpc_response", true),
-					)
-				}
-			}
-
-			if proxy == nil { // are not injecting chaos
-				if triage.Proxy { // will proxy
-					proxy = p.backend.Do
-				} else { // will fake
-					proxy = func(_ *fasthttp.Request, _ *fasthttp.Response) error { return nil }
-				}
-			}
-		}
-
-		{ // setup logger
-			loggedFields = append(loggedFields,
-				zap.Time("ts_request_received", tsReqReceived),
-				zap.Bool("proxy", triage.Proxy),
-				zap.Bool("mirror", triage.Mirror),
-				zap.Uint64("connection_id", ctx.ConnID()),
-				zap.String("remote_addr", ctx.RemoteAddr().String()),
-				zap.String("downstream_host", str(p.backendURI.Host())),
-				zap.String("jrpc_method", triage.JrpcMethod),
-			)
-
-			if len(triage.Transactions) > 0 {
+			switch {
+			case injectHttpError:
+				job.proxy = p.injectHttpError
 				loggedFields = append(loggedFields,
-					zap.Array("txs", triage.Transactions),
+					zap.Bool("chaos_http_error", true),
+				)
+			case injectJrpcError:
+				job.proxy = p.injectJrpcError(job.triage, job.req, job.res)
+				loggedFields = append(loggedFields,
+					zap.Bool("chaos_jrpc_error", true),
+				)
+			case injectBadJrpcResponse:
+				job.proxy = p.injectInvalidJrpcResponse
+				loggedFields = append(loggedFields,
+					zap.Bool("chaos_invalid_jrpc_response", true),
 				)
 			}
-
-			l = p.logger.With(loggedFields...)
 		}
 
-		jrpcMethodForMetrics = triage.JrpcMethod
-		if triage.Mirror {
-			jrpcMethodForMetrics += "+"
+		if job.proxy == nil { // are not injecting chaos
+			if job.triage.Proxy { // will proxy
+				job.proxy = p.backend.Do
+			} else { // will fake
+				job.proxy = func(_ *fasthttp.Request, _ *fasthttp.Response) error { return nil }
+			}
 		}
 	}
 
-	wg.Add(1)
-
-	go func() {
-		defer wg.Done()
-
-		var (
-			loggedFields = make([]zap.Field, 0, 12)
-			success      = true
+	{ // setup logger
+		loggedFields = append(loggedFields,
+			zap.Time("ts_request_received", job.tsReqReceived),
+			zap.Bool("proxy", job.triage.Proxy),
+			zap.Bool("mirror", job.triage.Mirror),
+			zap.Uint64("connection_id", ctx.ConnID()),
+			zap.String("remote_addr", ctx.RemoteAddr().String()),
+			zap.String("downstream_host", str(p.backendURI.Host())),
+			zap.String("jrpc_method", job.triage.JrpcMethod),
 		)
 
-		tsReqProxyStart := time.Now()
-		err := proxy(req, res)
-		tsReqProxyEnd := time.Now()
-
-		if err != nil {
-			success = false
-
-			switch str(req.Header.ContentType()) {
-			case "application/json":
-				res.SetStatusCode(fasthttp.StatusAccepted)
-				res.SetBody([]byte(fmt.Sprintf(`{"jsonrpc":"2.0","error":{"code":-32042,"message":%s}}`, strconv.Quote(err.Error()))))
-			default:
-				res.SetBody([]byte(err.Error()))
-				res.SetStatusCode(fasthttp.StatusBadGateway)
-			}
-
+		if len(job.triage.Transactions) > 0 {
 			loggedFields = append(loggedFields,
-				zap.NamedError("error_backend", err),
+				zap.Array("txs", job.triage.Transactions),
 			)
 		}
 
-		if p.cfg.Chaos.Enabled { // chaos-inject latency
-			latency := time.Duration(rand.Int64N(int64(p.cfg.Chaos.MaxInjectedLatency) + 1))
-			latency = max(latency, p.cfg.Chaos.MinInjectedLatency)
-			time.Sleep(latency - time.Since(tsReqReceived))
-			loggedFields = append(loggedFields,
-				zap.Bool("latency_chaos", true),
-			)
-		}
+		job.log = p.logger.With(loggedFields...)
+	}
 
-		{ // add log fields
-			if p.cfg.Proxy.LogRequests {
-				var jsonRequest interface{}
-				if err := json.Unmarshal(req.Body(), &jsonRequest); err == nil {
-					loggedFields = append(loggedFields,
-						zap.Any("json_request", jsonRequest),
-					)
-				} else {
-					loggedFields = append(loggedFields,
-						zap.NamedError("error_unmarshal", err),
-						zap.String("http_request", str(req.Body())),
-					)
-				}
-			}
+	job.jrpcMethodForMetrics = job.triage.JrpcMethod
+	if job.triage.Mirror {
+		job.jrpcMethodForMetrics += "+"
+	}
 
-			if p.cfg.Proxy.LogResponses {
-				var body []byte
+	return job
+}
 
-				switch str(res.Header.ContentEncoding()) {
-				default:
-					body = res.Body()
-				case "gzip":
-					if body, err = res.BodyGunzip(); err != nil {
-						loggedFields = append(loggedFields,
-							zap.NamedError("error_gunzip", err),
-							zap.String("hex_response", hex.EncodeToString(res.Body())),
-						)
-					}
-				}
+func (p *Proxy) newJobMirror(ctx *fasthttp.RequestCtx, pjob *jobProxy, uri *fasthttp.URI) *jobMirror {
+	req := fasthttp.AcquireRequest()
+	res := fasthttp.AcquireResponse()
 
-				if body != nil {
-					var jsonResponse interface{}
-					if err := json.Unmarshal(body, &jsonResponse); err == nil {
-						loggedFields = append(loggedFields,
-							zap.Any("json_response", jsonResponse),
-						)
-					} else {
-						loggedFields = append(loggedFields,
-							zap.NamedError("error_unmarshal", err),
-							zap.String("http_response", str(body)),
-						)
-					}
-				}
-			}
+	ctx.Request.CopyTo(req)
+	req.SetURI(uri)
+	req.Header.Add("x-forwarded-for", ctx.RemoteIP().String())
+	req.Header.Add("x-forwarded-host", str(ctx.Host()))
+	req.Header.Add("x-forwarded-proto", str(ctx.Request.URI().Scheme()))
 
-			loggedFields = append(loggedFields,
-				zap.Int("http_status", res.StatusCode()),
-				zap.Duration("latency_backend", tsReqProxyEnd.Sub(tsReqProxyStart)),
-				zap.Duration("latency_total", time.Since(tsReqReceived)),
-			)
-		}
+	return &jobMirror{
+		log:                  pjob.log,
+		req:                  req,
+		res:                  res,
+		jrpcMethodForMetrics: pjob.jrpcMethodForMetrics,
+	}
+}
 
-		{ // emit logs and metrics
-			metricAttributes := otelapi.WithAttributes(
-				attribute.KeyValue{Key: "proxy", Value: attribute.StringValue(p.cfg.Name)},
-				attribute.KeyValue{Key: "jrpc_method", Value: attribute.StringValue(jrpcMethodForMetrics)},
-				attribute.KeyValue{Key: "content_encoding", Value: attribute.StringValue(str(res.Header.ContentEncoding()))},
-			)
+func (p *Proxy) receive(ctx *fasthttp.RequestCtx) {
+	job := p.newJobProxy(ctx)
+	defer fasthttp.ReleaseResponse(job.res)
+	defer fasthttp.ReleaseRequest(job.req)
 
-			metrics.RequestSize.Record(context.TODO(), int64(req.Header.ContentLength()), metricAttributes)
-			metrics.ResponseSize.Record(context.TODO(), int64(res.Header.ContentLength()), metricAttributes)
-			metrics.LatencyBackend.Record(context.TODO(), tsReqProxyEnd.Sub(tsReqProxyStart).Milliseconds(), metricAttributes)
-			metrics.LatencyTotal.Record(context.TODO(), time.Since(tsReqReceived).Milliseconds(), metricAttributes)
+	job.wg.Add(1)
 
-			if !success {
-				metrics.ProxyFailureCount.Add(context.TODO(), 1, metricAttributes)
-				l.Error("Failed to proxy the request", loggedFields...)
-			} else if triage.Proxy {
-				metrics.ProxySuccessCount.Add(context.TODO(), 1, metricAttributes)
-				l.Info("Proxied the request", loggedFields...)
-			} else {
-				metrics.ProxyFakeCount.Add(context.TODO(), 1, metricAttributes)
-				l.Info("Faked the request", loggedFields...)
-			}
-		}
-	}()
+	go p.execJobProxy(job)
 
-	if triage.Mirror {
+	if job.triage.Mirror {
 		for _, uri := range p.peerURIs {
-			req := fasthttp.AcquireRequest()
-			res := fasthttp.AcquireResponse()
-
-			ctx.Request.CopyTo(req)
-			req.SetURI(uri)
-			req.Header.Add("x-forwarded-for", ctx.RemoteIP().String())
-			req.Header.Add("x-forwarded-host", str(ctx.Host()))
-			req.Header.Add("x-forwarded-proto", str(ctx.Request.URI().Scheme()))
-
-			go func() {
-				defer fasthttp.ReleaseRequest(req)
-				defer fasthttp.ReleaseResponse(res)
-
-				//
-				// NOTE: must _not_ use (or hold references to) `ctx` down here
-				//
-
-				err := p.peer.Do(req, res)
-
-				loggedFields := make([]zap.Field, 0, 12)
-				{ // add log fields
-					if err == nil {
-						loggedFields = append(loggedFields,
-							zap.Int("http_status", res.StatusCode()),
-						)
-
-						if p.cfg.Proxy.LogResponses {
-							switch str(res.Header.ContentEncoding()) {
-							default:
-								var jsonResponse interface{}
-								if err := json.Unmarshal(res.Body(), &jsonResponse); err == nil {
-									loggedFields = append(loggedFields,
-										zap.Any("json_response", jsonResponse),
-									)
-								} else {
-									loggedFields = append(loggedFields,
-										zap.String("http_response", str(res.Body())),
-									)
-								}
-
-							case "gzip":
-								if body, err := res.BodyGunzip(); err == nil {
-									var jsonResponse interface{}
-									if err := json.Unmarshal(body, &jsonResponse); err == nil {
-										loggedFields = append(loggedFields,
-											zap.Any("json_response", jsonResponse),
-										)
-									} else {
-										loggedFields = append(loggedFields,
-											zap.String("http_response", str(body)),
-										)
-									}
-								} else {
-									loggedFields = append(loggedFields,
-										zap.NamedError("error_gzip", err),
-										zap.String("hex_response", hex.EncodeToString(res.Body())),
-									)
-								}
-							}
-						}
-					} else {
-						loggedFields = append(loggedFields,
-							zap.NamedError("error_mirror", err),
-						)
-					}
-
-					loggedFields = append(loggedFields,
-						zap.String("mirror_host", str(uri.Host())),
-					)
-
-					if p.cfg.Proxy.LogRequests {
-						var jsonRequest interface{}
-						if err := json.Unmarshal(req.Body(), &jsonRequest); err == nil {
-							loggedFields = append(loggedFields,
-								zap.Any("json_request", jsonRequest),
-							)
-						} else {
-							loggedFields = append(loggedFields,
-								zap.String("http_request", str(req.Body())),
-							)
-						}
-					}
-				}
-
-				{ // emit logs and metrics
-					metricAttributes := otelapi.WithAttributes(
-						attribute.KeyValue{Key: "proxy", Value: attribute.StringValue(p.cfg.Name)},
-						attribute.KeyValue{Key: "mirror_host", Value: attribute.StringValue(str(uri.Host()))},
-						attribute.KeyValue{Key: "jrpc_method", Value: attribute.StringValue(jrpcMethodForMetrics)},
-					)
-
-					if err == nil {
-						l.Info("Mirrored the request", loggedFields...)
-						metrics.MirrorSuccessCount.Add(context.TODO(), 1, metricAttributes)
-					} else {
-						l.Error("Failed to mirror the request", loggedFields...)
-						metrics.MirrorFailureCount.Add(context.TODO(), 1, metricAttributes)
-					}
-
-					_ = l.Sync()
-				}
-			}()
+			go p.execJobMirror(p.newJobMirror(ctx, job, uri))
 		}
 	}
 
-	wg.Wait()
+	job.wg.Wait()
 
-	res.CopyTo(&ctx.Response)
+	job.res.CopyTo(&ctx.Response)
 
 	{ // check if this is a draining connection
 		addr := ctx.RemoteIP().String()
@@ -633,14 +431,215 @@ func (p *Proxy) receive(ctx *fasthttp.RequestCtx) {
 		if conn, isDraining := p.drainingConnections[addr]; isDraining {
 			delete(p.drainingConnections, addr)
 			err := conn.Close()
-			l.Info("Drained the upstream connection as finished handling a request",
+			job.log.Info("Drained the upstream connection as finished handling a request",
 				zap.Error(err),
 				zap.Int("remaining", len(p.drainingConnections)),
 			)
 		}
 	}
 
-	_ = l.Sync()
+	_ = job.log.Sync()
+}
+
+func (p *Proxy) execJobProxy(job *jobProxy) {
+	defer job.wg.Done()
+
+	tsReqProxyStart := time.Now()
+	err := job.proxy(job.req, job.res)
+	tsReqProxyEnd := time.Now()
+	success := (err == nil)
+
+	loggedFields := make([]zap.Field, 0, 12)
+
+	if err != nil {
+		switch str(job.req.Header.ContentType()) {
+		case "application/json":
+			job.res.SetStatusCode(fasthttp.StatusAccepted)
+			job.res.SetBody([]byte(fmt.Sprintf(`{"jsonrpc":"2.0","error":{"code":-32042,"message":%s}}`, strconv.Quote(err.Error()))))
+		default:
+			job.res.SetBody([]byte(err.Error()))
+			job.res.SetStatusCode(fasthttp.StatusBadGateway)
+		}
+
+		loggedFields = append(loggedFields,
+			zap.NamedError("error_backend", err),
+		)
+	}
+
+	if p.cfg.Chaos.Enabled { // chaos-inject latency
+		latency := time.Duration(rand.Int64N(int64(p.cfg.Chaos.MaxInjectedLatency) + 1))
+		latency = max(latency, p.cfg.Chaos.MinInjectedLatency)
+		time.Sleep(latency - time.Since(job.tsReqReceived))
+		loggedFields = append(loggedFields,
+			zap.Bool("latency_chaos", true),
+		)
+	}
+
+	{ // add log fields
+		if p.cfg.Proxy.LogRequests {
+			var jsonRequest interface{}
+			if err := json.Unmarshal(job.req.Body(), &jsonRequest); err == nil {
+				loggedFields = append(loggedFields,
+					zap.Any("json_request", jsonRequest),
+				)
+			} else {
+				loggedFields = append(loggedFields,
+					zap.NamedError("error_unmarshal", err),
+					zap.String("http_request", str(job.req.Body())),
+				)
+			}
+		}
+
+		if p.cfg.Proxy.LogResponses {
+			var body []byte
+
+			switch str(job.res.Header.ContentEncoding()) {
+			default:
+				body = job.res.Body()
+			case "gzip":
+				if body, err = job.res.BodyGunzip(); err != nil {
+					loggedFields = append(loggedFields,
+						zap.NamedError("error_gunzip", err),
+						zap.String("hex_response", hex.EncodeToString(job.res.Body())),
+					)
+				}
+			}
+
+			if body != nil {
+				var jsonResponse interface{}
+				if err := json.Unmarshal(body, &jsonResponse); err == nil {
+					loggedFields = append(loggedFields,
+						zap.Any("json_response", jsonResponse),
+					)
+				} else {
+					loggedFields = append(loggedFields,
+						zap.NamedError("error_unmarshal", err),
+						zap.String("http_response", str(body)),
+					)
+				}
+			}
+		}
+
+		loggedFields = append(loggedFields,
+			zap.Int("http_status", job.res.StatusCode()),
+			zap.Duration("latency_backend", tsReqProxyEnd.Sub(tsReqProxyStart)),
+			zap.Duration("latency_total", time.Since(job.tsReqReceived)),
+		)
+	}
+
+	{ // emit logs and metrics
+		metricAttributes := otelapi.WithAttributes(
+			attribute.KeyValue{Key: "proxy", Value: attribute.StringValue(p.cfg.Name)},
+			attribute.KeyValue{Key: "jrpc_method", Value: attribute.StringValue(job.jrpcMethodForMetrics)},
+			attribute.KeyValue{Key: "content_encoding", Value: attribute.StringValue(str(job.res.Header.ContentEncoding()))},
+		)
+
+		metrics.RequestSize.Record(context.TODO(), int64(job.req.Header.ContentLength()), metricAttributes)
+		metrics.ResponseSize.Record(context.TODO(), int64(job.res.Header.ContentLength()), metricAttributes)
+		metrics.LatencyBackend.Record(context.TODO(), tsReqProxyEnd.Sub(tsReqProxyStart).Milliseconds(), metricAttributes)
+		metrics.LatencyTotal.Record(context.TODO(), time.Since(job.tsReqReceived).Milliseconds(), metricAttributes)
+
+		if !success {
+			metrics.ProxyFailureCount.Add(context.TODO(), 1, metricAttributes)
+			job.log.Error("Failed to proxy the request", loggedFields...)
+		} else if job.triage.Proxy {
+			metrics.ProxySuccessCount.Add(context.TODO(), 1, metricAttributes)
+			job.log.Info("Proxied the request", loggedFields...)
+		} else {
+			metrics.ProxyFakeCount.Add(context.TODO(), 1, metricAttributes)
+			job.log.Info("Faked the request", loggedFields...)
+		}
+	}
+}
+
+func (p *Proxy) execJobMirror(job *jobMirror) {
+	defer fasthttp.ReleaseRequest(job.req)
+	defer fasthttp.ReleaseResponse(job.res)
+
+	err := p.peer.Do(job.req, job.res)
+
+	loggedFields := make([]zap.Field, 0, 12)
+	{ // add log fields
+		if err == nil {
+			loggedFields = append(loggedFields,
+				zap.Int("http_status", job.res.StatusCode()),
+			)
+
+			if p.cfg.Proxy.LogResponses {
+				switch str(job.res.Header.ContentEncoding()) {
+				default:
+					var jsonResponse interface{}
+					if err := json.Unmarshal(job.res.Body(), &jsonResponse); err == nil {
+						loggedFields = append(loggedFields,
+							zap.Any("json_response", jsonResponse),
+						)
+					} else {
+						loggedFields = append(loggedFields,
+							zap.String("http_response", str(job.res.Body())),
+						)
+					}
+
+				case "gzip":
+					if body, err := job.res.BodyGunzip(); err == nil {
+						var jsonResponse interface{}
+						if err := json.Unmarshal(body, &jsonResponse); err == nil {
+							loggedFields = append(loggedFields,
+								zap.Any("json_response", jsonResponse),
+							)
+						} else {
+							loggedFields = append(loggedFields,
+								zap.String("http_response", str(body)),
+							)
+						}
+					} else {
+						loggedFields = append(loggedFields,
+							zap.NamedError("error_gzip", err),
+							zap.String("hex_response", hex.EncodeToString(job.res.Body())),
+						)
+					}
+				}
+			}
+		} else {
+			loggedFields = append(loggedFields,
+				zap.NamedError("error_mirror", err),
+			)
+		}
+
+		loggedFields = append(loggedFields,
+			zap.String("mirror_host", str(job.req.Host())),
+		)
+
+		if p.cfg.Proxy.LogRequests {
+			var jsonRequest interface{}
+			if err := json.Unmarshal(job.req.Body(), &jsonRequest); err == nil {
+				loggedFields = append(loggedFields,
+					zap.Any("json_request", jsonRequest),
+				)
+			} else {
+				loggedFields = append(loggedFields,
+					zap.String("http_request", str(job.req.Body())),
+				)
+			}
+		}
+	}
+
+	{ // emit logs and metrics
+		metricAttributes := otelapi.WithAttributes(
+			attribute.KeyValue{Key: "proxy", Value: attribute.StringValue(p.cfg.Name)},
+			attribute.KeyValue{Key: "mirror_host", Value: attribute.StringValue(str(job.req.Host()))},
+			attribute.KeyValue{Key: "jrpc_method", Value: attribute.StringValue(job.jrpcMethodForMetrics)},
+		)
+
+		if err == nil {
+			job.log.Info("Mirrored the request", loggedFields...)
+			metrics.MirrorSuccessCount.Add(context.TODO(), 1, metricAttributes)
+		} else {
+			job.log.Error("Failed to mirror the request", loggedFields...)
+			metrics.MirrorFailureCount.Add(context.TODO(), 1, metricAttributes)
+		}
+
+		_ = job.log.Sync()
+	}
 }
 
 func (p *Proxy) injectHttpError(_ *fasthttp.Request, res *fasthttp.Response) error {
