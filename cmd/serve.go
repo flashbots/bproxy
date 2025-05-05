@@ -140,7 +140,7 @@ func CommandServe(cfg *config.Config) *cli.Command {
 				EnvVars:     []string{envPrefix + strings.ToUpper(category) + "_MAX_BACKEND_CONNECTIONS_PER_HOST"},
 				Name:        category + "-max-backend-connections-per-host",
 				Usage:       "maximum connections `count` per " + category + " backend host",
-				Value:       512,
+				Value:       1,
 			},
 
 			&cli.IntFlag{ // --xxx-max-client-connections-per-ip

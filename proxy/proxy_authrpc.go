@@ -120,10 +120,28 @@ func (p *AuthrpcProxy) triage(body []byte) (*triaged.Request, *fasthttp.Response
 			JrpcID:     call.GetID(),
 		}, fasthttp.AcquireResponse()
 
+	case "engine_getPayloadV3":
+		// only proxy
+		return &triaged.Request{
+			Proxy:      true,
+			Prioritise: true,
+			JrpcMethod: call.GetMethod(),
+			JrpcID:     call.GetID(),
+		}, fasthttp.AcquireResponse()
+
+	case "engine_getPayloadV4":
+		return &triaged.Request{
+			Proxy:      true,
+			Prioritise: true,
+			JrpcMethod: call.GetMethod(),
+			JrpcID:     call.GetID(),
+		}, fasthttp.AcquireResponse()
+
 	case "engine_newPayloadV3":
 		// proxy & mirror
 		return &triaged.Request{
 			Proxy:      true,
+			Prioritise: true,
 			Mirror:     true,
 			JrpcMethod: call.GetMethod(),
 			JrpcID:     call.GetID(),
@@ -133,6 +151,7 @@ func (p *AuthrpcProxy) triage(body []byte) (*triaged.Request, *fasthttp.Response
 		// proxy & mirror
 		return &triaged.Request{
 			Proxy:      true,
+			Prioritise: true,
 			Mirror:     true,
 			JrpcMethod: call.GetMethod(),
 			JrpcID:     call.GetID(),
@@ -160,6 +179,7 @@ func (p *AuthrpcProxy) triage(body []byte) (*triaged.Request, *fasthttp.Response
 			if err != nil || fcuv3.HasExtraParam() {
 				return &triaged.Request{
 					Proxy:      true,
+					Prioritise: true,
 					Mirror:     true,
 					JrpcMethod: call.GetMethod(),
 					JrpcID:     call.GetID(),

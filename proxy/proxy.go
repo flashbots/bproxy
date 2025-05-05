@@ -52,6 +52,9 @@ type Proxy struct {
 	connections         map[string]net.Conn
 	drainingConnections map[string]net.Conn
 	mxConnections       sync.Mutex
+
+	jobQueueHi chan *jobProxy
+	jobQueueLo chan *jobProxy
 }
 
 func newProxy(cfg *Config) (*Proxy, error) {
@@ -62,6 +65,8 @@ func newProxy(cfg *Config) (*Proxy, error) {
 		logger:              l,
 		connections:         make(map[string]net.Conn),
 		drainingConnections: make(map[string]net.Conn),
+		jobQueueHi:          make(chan *jobProxy, 512),
+		jobQueueLo:          make(chan *jobProxy, 512),
 	}
 
 	p.triage = func(body []byte) (*triaged.Request, *fasthttp.Response) {
@@ -196,7 +201,7 @@ func (p *Proxy) Run(ctx context.Context, failure chan<- error) {
 		p.run()
 	}
 
-	go func() { // run the authrpc proxy
+	go func() { // run the proxy
 		l.Info("Proxy is going up...",
 			zap.String("listen_address", p.cfg.Proxy.ListenAddress),
 			zap.String("backend", p.cfg.Proxy.BackendURL),
@@ -212,6 +217,22 @@ func (p *Proxy) Run(ctx context.Context, failure chan<- error) {
 			}
 		}
 		l.Info("Proxy is down")
+	}()
+
+	go func() { // run the job loop
+		for {
+			select {
+			case job := <-p.jobQueueHi:
+				p.execJobProxy(job)
+			default:
+				select {
+				case job := <-p.jobQueueHi:
+					p.execJobProxy(job)
+				case job := <-p.jobQueueLo:
+					p.execJobProxy(job)
+				}
+			}
+		}
 	}()
 
 	if p.cfg.Proxy.HealthcheckURL != "" {
@@ -411,7 +432,11 @@ func (p *Proxy) receive(ctx *fasthttp.RequestCtx) {
 
 	job.wg.Add(1)
 
-	go p.execJobProxy(job)
+	if job.triage.Prioritise {
+		p.jobQueueHi <- job
+	} else {
+		p.jobQueueLo <- job
+	}
 
 	if job.triage.Mirror {
 		for _, uri := range p.peerURIs {
