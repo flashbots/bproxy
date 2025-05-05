@@ -397,6 +397,7 @@ func (p *Proxy) newJobMirror(ctx *fasthttp.RequestCtx, pjob *jobProxy, uri *fast
 
 	return &jobMirror{
 		log:                  pjob.log,
+		host:                 str(uri.Host()),
 		req:                  req,
 		res:                  res,
 		jrpcMethodForMetrics: pjob.jrpcMethodForMetrics,
@@ -531,7 +532,6 @@ func (p *Proxy) execJobProxy(job *jobProxy) {
 		metricAttributes := otelapi.WithAttributes(
 			attribute.KeyValue{Key: "proxy", Value: attribute.StringValue(p.cfg.Name)},
 			attribute.KeyValue{Key: "jrpc_method", Value: attribute.StringValue(job.jrpcMethodForMetrics)},
-			attribute.KeyValue{Key: "content_encoding", Value: attribute.StringValue(str(job.res.Header.ContentEncoding()))},
 		)
 
 		metrics.RequestSize.Record(context.TODO(), int64(job.req.Header.ContentLength()), metricAttributes)
@@ -606,7 +606,7 @@ func (p *Proxy) execJobMirror(job *jobMirror) {
 		}
 
 		loggedFields = append(loggedFields,
-			zap.String("mirror_host", str(job.req.Host())),
+			zap.String("mirror_host", job.host),
 		)
 
 		if p.cfg.Proxy.LogRequests {
@@ -626,7 +626,7 @@ func (p *Proxy) execJobMirror(job *jobMirror) {
 	{ // emit logs and metrics
 		metricAttributes := otelapi.WithAttributes(
 			attribute.KeyValue{Key: "proxy", Value: attribute.StringValue(p.cfg.Name)},
-			attribute.KeyValue{Key: "mirror_host", Value: attribute.StringValue(str(job.req.Host()))},
+			attribute.KeyValue{Key: "mirror_host", Value: attribute.StringValue(job.host)},
 			attribute.KeyValue{Key: "jrpc_method", Value: attribute.StringValue(job.jrpcMethodForMetrics)},
 		)
 

@@ -27,8 +27,9 @@ type jobProxy struct {
 type jobMirror struct {
 	log *zap.Logger
 
-	req *fasthttp.Request
-	res *fasthttp.Response
+	host string
+	req  *fasthttp.Request
+	res  *fasthttp.Response
 
 	jrpcMethodForMetrics string
 }
