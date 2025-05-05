@@ -138,6 +138,7 @@ func (p *RpcProxy) triageSingle(call jrpc.Call) (*triaged.Request, *fasthttp.Res
 
 	res := &triaged.Request{
 		Proxy:      true,
+		Prioritise: true,
 		Mirror:     true,
 		JrpcMethod: call.GetMethod(),
 		JrpcID:     call.GetID(),
@@ -183,6 +184,7 @@ func (p *RpcProxy) triageBatch(batch []jrpc.Call) (*triaged.Request, *fasthttp.R
 
 	res := &triaged.Request{
 		Proxy:        true,
+		Prioritise:   true,
 		Mirror:       true,
 		JrpcMethod:   "batch(" + strconv.Itoa(len(batch)) + ")",
 		JrpcID:       batch[0].GetID(),

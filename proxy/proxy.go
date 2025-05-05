@@ -34,7 +34,7 @@ type Proxy struct {
 
 	backendURI               *fasthttp.URI
 	extraMirroredJrpcMethods map[string]struct{}
-	peerURIs                 []*fasthttp.URI
+	peerURIs                 map[string]*fasthttp.URI
 
 	healthcheck         *fasthttp.Client
 	healthcheckURI      *fasthttp.URI
@@ -53,8 +53,11 @@ type Proxy struct {
 	drainingConnections map[string]net.Conn
 	mxConnections       sync.Mutex
 
-	jobQueueHi chan *jobProxy
-	jobQueueLo chan *jobProxy
+	queueProxyHi chan *jobProxy
+	queueProxyLo chan *jobProxy
+
+	queueMirrorHi map[string]chan *jobMirror
+	queueMirrorLo map[string]chan *jobMirror
 }
 
 func newProxy(cfg *Config) (*Proxy, error) {
@@ -65,8 +68,8 @@ func newProxy(cfg *Config) (*Proxy, error) {
 		logger:              l,
 		connections:         make(map[string]net.Conn),
 		drainingConnections: make(map[string]net.Conn),
-		jobQueueHi:          make(chan *jobProxy, 512),
-		jobQueueLo:          make(chan *jobProxy, 512),
+		queueProxyHi:        make(chan *jobProxy, 512),
+		queueProxyLo:        make(chan *jobProxy, 512),
 	}
 
 	p.triage = func(body []byte) (*triaged.Request, *fasthttp.Response) {
@@ -129,19 +132,26 @@ func newProxy(cfg *Config) (*Proxy, error) {
 				InsecureSkipVerify: true,
 			}
 		}
-	}
 
-	p.peerURIs = make([]*fasthttp.URI, 0, len(cfg.Proxy.PeerURLs))
-	for _, peerURL := range cfg.Proxy.PeerURLs {
-		peerURI := fasthttp.AcquireURI()
-		if err := peerURI.Parse(nil, []byte(peerURL)); err != nil {
-			fasthttp.ReleaseURI(p.backendURI)
-			for _, uri := range p.peerURIs {
-				fasthttp.ReleaseURI(uri)
+		p.peerURIs = make(map[string]*fasthttp.URI, len(cfg.Proxy.PeerURLs))
+		p.queueMirrorHi = make(map[string]chan *jobMirror, len(cfg.Proxy.PeerURLs))
+		p.queueMirrorLo = make(map[string]chan *jobMirror, len(cfg.Proxy.PeerURLs))
+
+		for _, peerURL := range cfg.Proxy.PeerURLs {
+			peerURI := fasthttp.AcquireURI()
+			if err := peerURI.Parse(nil, []byte(peerURL)); err != nil {
+				fasthttp.ReleaseURI(p.backendURI)
+				for _, uri := range p.peerURIs {
+					fasthttp.ReleaseURI(uri)
+				}
+				return nil, err
 			}
-			return nil, err
+			host := str(peerURI.Host())
+
+			p.peerURIs[host] = peerURI
+			p.queueMirrorHi[host] = make(chan *jobMirror, 512)
+			p.queueMirrorLo[host] = make(chan *jobMirror, 512)
 		}
-		p.peerURIs = append(p.peerURIs, peerURI)
 	}
 
 	if cfg.Proxy.HealthcheckURL != "" {
@@ -219,21 +229,42 @@ func (p *Proxy) Run(ctx context.Context, failure chan<- error) {
 		l.Info("Proxy is down")
 	}()
 
-	go func() { // run the job loop
+	go func() { // run the proxy job loop
 		for {
 			select {
-			case job := <-p.jobQueueHi:
+			case job := <-p.queueProxyHi:
 				p.execJobProxy(job)
 			default:
 				select {
-				case job := <-p.jobQueueHi:
+				case job := <-p.queueProxyHi:
 					p.execJobProxy(job)
-				case job := <-p.jobQueueLo:
+				case job := <-p.queueProxyLo:
 					p.execJobProxy(job)
 				}
 			}
 		}
 	}()
+
+	for host := range p.peerURIs { // run the mirror job loops
+		queueMirrorHi := p.queueMirrorHi[host]
+		queueMirrorLo := p.queueMirrorLo[host]
+
+		go func() {
+			for {
+				select {
+				case job := <-queueMirrorHi:
+					p.execJobMirror(job)
+				default:
+					select {
+					case job := <-queueMirrorHi:
+						p.execJobMirror(job)
+					case job := <-queueMirrorLo:
+						p.execJobMirror(job)
+					}
+				}
+			}
+		}()
+	}
 
 	if p.cfg.Proxy.HealthcheckURL != "" {
 		go func() {
@@ -315,7 +346,7 @@ func (p *Proxy) Observe(ctx context.Context, o otelapi.Observer) error {
 
 func (p *Proxy) newJobProxy(ctx *fasthttp.RequestCtx) *jobProxy {
 	job := &jobProxy{
-		tsReqReceived: time.Now(),
+		tsReqReceived: ctx.Time(),
 		wg:            &sync.WaitGroup{},
 	}
 
@@ -426,27 +457,34 @@ func (p *Proxy) newJobMirror(ctx *fasthttp.RequestCtx, pjob *jobProxy, uri *fast
 }
 
 func (p *Proxy) receive(ctx *fasthttp.RequestCtx) {
-	job := p.newJobProxy(ctx)
-	defer fasthttp.ReleaseResponse(job.res)
-	defer fasthttp.ReleaseRequest(job.req)
+	pj := p.newJobProxy(ctx)
+	defer fasthttp.ReleaseResponse(pj.res)
+	defer fasthttp.ReleaseRequest(pj.req)
 
-	job.wg.Add(1)
+	pj.wg.Add(1)
 
-	if job.triage.Prioritise {
-		p.jobQueueHi <- job
-	} else {
-		p.jobQueueLo <- job
-	}
+	{ // schedule jobs
+		if pj.triage.Prioritise {
+			p.queueProxyHi <- pj
+		} else {
+			p.queueProxyLo <- pj
+		}
 
-	if job.triage.Mirror {
-		for _, uri := range p.peerURIs {
-			go p.execJobMirror(p.newJobMirror(ctx, job, uri))
+		if pj.triage.Mirror {
+			for host, uri := range p.peerURIs {
+				mj := p.newJobMirror(ctx, pj, uri)
+				if pj.triage.Prioritise {
+					p.queueMirrorHi[host] <- mj
+				} else {
+					p.queueMirrorLo[host] <- mj
+				}
+			}
 		}
 	}
 
-	job.wg.Wait()
+	pj.wg.Wait()
 
-	job.res.CopyTo(&ctx.Response)
+	pj.res.CopyTo(&ctx.Response)
 
 	{ // check if this is a draining connection
 		addr := ctx.RemoteIP().String()
@@ -457,14 +495,14 @@ func (p *Proxy) receive(ctx *fasthttp.RequestCtx) {
 		if conn, isDraining := p.drainingConnections[addr]; isDraining {
 			delete(p.drainingConnections, addr)
 			err := conn.Close()
-			job.log.Info("Drained the upstream connection as finished handling a request",
+			pj.log.Info("Drained the upstream connection as finished handling a request",
 				zap.Error(err),
 				zap.Int("remaining", len(p.drainingConnections)),
 			)
 		}
 	}
 
-	_ = job.log.Sync()
+	_ = pj.log.Sync()
 }
 
 func (p *Proxy) execJobProxy(job *jobProxy) {
