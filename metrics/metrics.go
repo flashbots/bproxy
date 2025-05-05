@@ -26,7 +26,7 @@ func Setup(
 		setupRequestSize,
 		setupResponseSize,
 		setupLatencyBackend,
-		setupLatencyProxy,
+		setupLatencyTotal,
 		setupProxySuccessCount,
 		setupProxyFailureCount,
 		setupProxyFakeCount,
@@ -116,16 +116,16 @@ func setupLatencyBackend(ctx context.Context) error {
 	return nil
 }
 
-func setupLatencyProxy(ctx context.Context) error {
-	m, err := meter.Int64Histogram("latency_proxy",
-		otelapi.WithDescription("latency added by proxy"),
+func setupLatencyTotal(ctx context.Context) error {
+	m, err := meter.Int64Histogram("latency_total",
+		otelapi.WithDescription("total latency"),
 		otelapi.WithUnit("ms"),
-		otelapi.WithExplicitBucketBoundaries(0, 1, 2, 3, 4, 6, 8, 12, 16, 24),
+		otelapi.WithExplicitBucketBoundaries(0, 1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024),
 	)
 	if err != nil {
 		return err
 	}
-	LatencyProxy = m
+	LatencyTotal = m
 	return nil
 }
 

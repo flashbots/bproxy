@@ -308,24 +308,21 @@ func (p *Proxy) receive(ctx *fasthttp.RequestCtx) {
 		jrpcMethodForMetrics string
 	)
 
-	metrics.RequestSize.Record(context.TODO(), int64(ctx.Request.Header.ContentLength()), otelapi.WithAttributes(
-		attribute.KeyValue{Key: "proxy", Value: attribute.StringValue(p.cfg.Name)},
-		attribute.KeyValue{Key: "content_encoding", Value: attribute.StringValue(str(ctx.Request.Header.ContentEncoding()))},
-	))
-
 	triage, res = p.triage(ctx.Request.Body())
 	defer fasthttp.ReleaseResponse(res)
 
 	{ // setup
-		req = fasthttp.AcquireRequest()
-		defer fasthttp.ReleaseRequest(req)
+		{ // prepare the request
+			req = fasthttp.AcquireRequest()
+			defer fasthttp.ReleaseRequest(req)
 
-		ctx.Request.CopyTo(req)
-		req.SetTimeout(p.cfg.Proxy.BackendTimeout)
-		req.SetURI(p.backendURI)
-		req.Header.Add("x-forwarded-for", ctx.RemoteIP().String())
-		req.Header.Add("x-forwarded-host", str(ctx.Host()))
-		req.Header.Add("x-forwarded-proto", str(ctx.Request.URI().Scheme()))
+			ctx.Request.CopyTo(req)
+			req.SetTimeout(p.cfg.Proxy.BackendTimeout)
+			req.SetURI(p.backendURI)
+			req.Header.Add("x-forwarded-for", ctx.RemoteIP().String())
+			req.Header.Add("x-forwarded-host", str(ctx.Host()))
+			req.Header.Add("x-forwarded-proto", str(ctx.Request.URI().Scheme()))
+		}
 
 		loggedFields := make([]zap.Field, 0, 12)
 
@@ -373,23 +370,25 @@ func (p *Proxy) receive(ctx *fasthttp.RequestCtx) {
 			}
 		}
 
-		loggedFields = append(loggedFields,
-			zap.Time("ts_request_received", tsReqReceived),
-			zap.Bool("proxy", triage.Proxy),
-			zap.Bool("mirror", triage.Mirror),
-			zap.Uint64("connection_id", ctx.ConnID()),
-			zap.String("remote_addr", ctx.RemoteAddr().String()),
-			zap.String("downstream_host", str(p.backendURI.Host())),
-			zap.String("jrpc_method", triage.JrpcMethod),
-		)
-
-		if len(triage.Transactions) > 0 {
+		{ // setup logger
 			loggedFields = append(loggedFields,
-				zap.Array("txs", triage.Transactions),
+				zap.Time("ts_request_received", tsReqReceived),
+				zap.Bool("proxy", triage.Proxy),
+				zap.Bool("mirror", triage.Mirror),
+				zap.Uint64("connection_id", ctx.ConnID()),
+				zap.String("remote_addr", ctx.RemoteAddr().String()),
+				zap.String("downstream_host", str(p.backendURI.Host())),
+				zap.String("jrpc_method", triage.JrpcMethod),
 			)
-		}
 
-		l = p.logger.With(loggedFields...)
+			if len(triage.Transactions) > 0 {
+				loggedFields = append(loggedFields,
+					zap.Array("txs", triage.Transactions),
+				)
+			}
+
+			l = p.logger.With(loggedFields...)
+		}
 
 		jrpcMethodForMetrics = triage.JrpcMethod
 		if triage.Mirror {
@@ -410,31 +409,6 @@ func (p *Proxy) receive(ctx *fasthttp.RequestCtx) {
 		tsReqProxyStart := time.Now()
 		err := proxy(req, res)
 		tsReqProxyEnd := time.Now()
-
-		metrics.ResponseSize.Record(context.TODO(), int64(res.Header.ContentLength()), otelapi.WithAttributes(
-			attribute.KeyValue{Key: "proxy", Value: attribute.StringValue(p.cfg.Name)},
-			attribute.KeyValue{Key: "content_encoding", Value: attribute.StringValue(str(res.Header.ContentEncoding()))},
-		))
-
-		{ // add log fields
-			if p.cfg.Proxy.LogRequests {
-				var jsonRequest interface{}
-				if err := json.Unmarshal(req.Body(), &jsonRequest); err == nil {
-					loggedFields = append(loggedFields,
-						zap.Any("json_request", jsonRequest),
-					)
-				} else {
-					loggedFields = append(loggedFields,
-						zap.String("http_request", str(req.Body())),
-					)
-				}
-			}
-		}
-
-		metricAttributes := otelapi.WithAttributes(
-			attribute.KeyValue{Key: "proxy", Value: attribute.StringValue(p.cfg.Name)},
-			attribute.KeyValue{Key: "jrpc_method", Value: attribute.StringValue(jrpcMethodForMetrics)},
-		)
 
 		if err != nil {
 			success = false
@@ -458,13 +432,25 @@ func (p *Proxy) receive(ctx *fasthttp.RequestCtx) {
 			latency = max(latency, p.cfg.Chaos.MinInjectedLatency)
 			time.Sleep(latency - time.Since(tsReqReceived))
 			loggedFields = append(loggedFields,
-				zap.Bool("chaos_latency", true),
+				zap.Bool("latency_chaos", true),
 			)
 		}
-		res.CopyTo(&ctx.Response)
-		tsResProxyEnd := time.Now()
 
 		{ // add log fields
+			if p.cfg.Proxy.LogRequests {
+				var jsonRequest interface{}
+				if err := json.Unmarshal(req.Body(), &jsonRequest); err == nil {
+					loggedFields = append(loggedFields,
+						zap.Any("json_request", jsonRequest),
+					)
+				} else {
+					loggedFields = append(loggedFields,
+						zap.NamedError("error_unmarshal", err),
+						zap.String("http_request", str(req.Body())),
+					)
+				}
+			}
+
 			if p.cfg.Proxy.LogResponses {
 				var body []byte
 
@@ -495,32 +481,35 @@ func (p *Proxy) receive(ctx *fasthttp.RequestCtx) {
 				}
 			}
 
-			now := time.Now()
-			latency_warmup := tsReqProxyStart.Sub(tsReqReceived)
-			latency_backend := tsReqProxyEnd.Sub(tsReqProxyStart)
-			latency_cooldown := now.Sub(tsResProxyEnd)
-
 			loggedFields = append(loggedFields,
 				zap.Int("http_status", res.StatusCode()),
-				zap.Duration("latency_warmup", latency_warmup),
-				zap.Duration("latency_backend", latency_backend),
-				zap.Duration("latency_cooldown", latency_cooldown),
-				zap.Duration("latency_total", now.Sub(tsReqReceived)),
+				zap.Duration("latency_backend", tsReqProxyEnd.Sub(tsReqProxyStart)),
+				zap.Duration("latency_total", time.Since(tsReqReceived)),
 			)
-
-			metrics.LatencyBackend.Record(ctx, latency_backend.Milliseconds(), metricAttributes)
-			metrics.LatencyProxy.Record(ctx, (latency_warmup + latency_cooldown).Milliseconds(), metricAttributes)
 		}
 
-		if !success {
-			l.Error("Failed to proxy the request", loggedFields...)
-			metrics.ProxyFailureCount.Add(context.TODO(), 1, metricAttributes)
-		} else if triage.Proxy {
-			l.Info("Proxied the request", loggedFields...)
-			metrics.ProxySuccessCount.Add(context.TODO(), 1, metricAttributes)
-		} else {
-			l.Info("Faked the request", loggedFields...)
-			metrics.ProxyFakeCount.Add(context.TODO(), 1, metricAttributes)
+		{ // emit logs and metrics
+			metricAttributes := otelapi.WithAttributes(
+				attribute.KeyValue{Key: "proxy", Value: attribute.StringValue(p.cfg.Name)},
+				attribute.KeyValue{Key: "jrpc_method", Value: attribute.StringValue(jrpcMethodForMetrics)},
+				attribute.KeyValue{Key: "content_encoding", Value: attribute.StringValue(str(res.Header.ContentEncoding()))},
+			)
+
+			metrics.RequestSize.Record(context.TODO(), int64(req.Header.ContentLength()), metricAttributes)
+			metrics.ResponseSize.Record(context.TODO(), int64(res.Header.ContentLength()), metricAttributes)
+			metrics.LatencyBackend.Record(context.TODO(), tsReqProxyEnd.Sub(tsReqProxyStart).Milliseconds(), metricAttributes)
+			metrics.LatencyTotal.Record(context.TODO(), time.Since(tsReqReceived).Milliseconds(), metricAttributes)
+
+			if !success {
+				metrics.ProxyFailureCount.Add(context.TODO(), 1, metricAttributes)
+				l.Error("Failed to proxy the request", loggedFields...)
+			} else if triage.Proxy {
+				metrics.ProxySuccessCount.Add(context.TODO(), 1, metricAttributes)
+				l.Info("Proxied the request", loggedFields...)
+			} else {
+				metrics.ProxyFakeCount.Add(context.TODO(), 1, metricAttributes)
+				l.Info("Faked the request", loggedFields...)
+			}
 		}
 	}()
 
@@ -536,7 +525,8 @@ func (p *Proxy) receive(ctx *fasthttp.RequestCtx) {
 			req.Header.Add("x-forwarded-proto", str(ctx.Request.URI().Scheme()))
 
 			go func() {
-				var loggedFields = make([]zap.Field, 0, 12)
+				defer fasthttp.ReleaseRequest(req)
+				defer fasthttp.ReleaseResponse(res)
 
 				//
 				// NOTE: must _not_ use (or hold references to) `ctx` down here
@@ -544,33 +534,9 @@ func (p *Proxy) receive(ctx *fasthttp.RequestCtx) {
 
 				err := p.peer.Do(req, res)
 
+				loggedFields := make([]zap.Field, 0, 12)
 				{ // add log fields
-					loggedFields = append(loggedFields,
-						zap.String("mirror_host", str(uri.Host())),
-					)
-
-					if p.cfg.Proxy.LogRequests {
-						var jsonRequest interface{}
-						if err := json.Unmarshal(req.Body(), &jsonRequest); err == nil {
-							loggedFields = append(loggedFields,
-								zap.Any("json_request", jsonRequest),
-							)
-						} else {
-							loggedFields = append(loggedFields,
-								zap.String("http_request", str(req.Body())),
-							)
-						}
-					}
-				}
-
-				metricAttributes := otelapi.WithAttributes(
-					attribute.KeyValue{Key: "proxy", Value: attribute.StringValue(p.cfg.Name)},
-					attribute.KeyValue{Key: "mirror_host", Value: attribute.StringValue(str(uri.Host()))},
-					attribute.KeyValue{Key: "jrpc_method", Value: attribute.StringValue(jrpcMethodForMetrics)},
-				)
-
-				if err == nil {
-					{ // add log fields
+					if err == nil {
 						loggedFields = append(loggedFields,
 							zap.Int("http_status", res.StatusCode()),
 						)
@@ -609,28 +575,54 @@ func (p *Proxy) receive(ctx *fasthttp.RequestCtx) {
 								}
 							}
 						}
+					} else {
+						loggedFields = append(loggedFields,
+							zap.NamedError("error_mirror", err),
+						)
 					}
 
-					l.Info("Mirrored the request", loggedFields...)
-					metrics.MirrorSuccessCount.Add(context.TODO(), 1, metricAttributes)
-				} else {
 					loggedFields = append(loggedFields,
-						zap.Error(err),
+						zap.String("mirror_host", str(uri.Host())),
 					)
 
-					l.Error("Failed to mirror the request", loggedFields...)
-					metrics.MirrorFailureCount.Add(context.TODO(), 1, metricAttributes)
+					if p.cfg.Proxy.LogRequests {
+						var jsonRequest interface{}
+						if err := json.Unmarshal(req.Body(), &jsonRequest); err == nil {
+							loggedFields = append(loggedFields,
+								zap.Any("json_request", jsonRequest),
+							)
+						} else {
+							loggedFields = append(loggedFields,
+								zap.String("http_request", str(req.Body())),
+							)
+						}
+					}
 				}
 
-				_ = l.Sync()
+				{ // emit logs and metrics
+					metricAttributes := otelapi.WithAttributes(
+						attribute.KeyValue{Key: "proxy", Value: attribute.StringValue(p.cfg.Name)},
+						attribute.KeyValue{Key: "mirror_host", Value: attribute.StringValue(str(uri.Host()))},
+						attribute.KeyValue{Key: "jrpc_method", Value: attribute.StringValue(jrpcMethodForMetrics)},
+					)
 
-				fasthttp.ReleaseRequest(req)
-				fasthttp.ReleaseResponse(res)
+					if err == nil {
+						l.Info("Mirrored the request", loggedFields...)
+						metrics.MirrorSuccessCount.Add(context.TODO(), 1, metricAttributes)
+					} else {
+						l.Error("Failed to mirror the request", loggedFields...)
+						metrics.MirrorFailureCount.Add(context.TODO(), 1, metricAttributes)
+					}
+
+					_ = l.Sync()
+				}
 			}()
 		}
 	}
 
 	wg.Wait()
+
+	res.CopyTo(&ctx.Response)
 
 	{ // check if this is a draining connection
 		addr := ctx.RemoteIP().String()

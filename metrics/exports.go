@@ -9,7 +9,7 @@ var (
 	ResponseSize otelapi.Int64Histogram
 
 	LatencyBackend otelapi.Int64Histogram
-	LatencyProxy   otelapi.Int64Histogram
+	LatencyTotal   otelapi.Int64Histogram
 
 	ProxySuccessCount otelapi.Int64Counter
 	ProxyFailureCount otelapi.Int64Counter
