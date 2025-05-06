@@ -45,7 +45,7 @@ type Proxy struct {
 
 	logger *zap.Logger
 
-	triage func(body []byte) (*triaged.Request, *fasthttp.Response)
+	triage func(ctx *fasthttp.RequestCtx) (*triaged.Request, *fasthttp.Response)
 	run    func()
 	stop   func()
 
@@ -72,7 +72,7 @@ func newProxy(cfg *Config) (*Proxy, error) {
 		queueProxyLo:        make(chan *jobProxy, 512),
 	}
 
-	p.triage = func(body []byte) (*triaged.Request, *fasthttp.Response) {
+	p.triage = func(*fasthttp.RequestCtx) (*triaged.Request, *fasthttp.Response) {
 		return &triaged.Request{}, fasthttp.AcquireResponse()
 	}
 
@@ -350,7 +350,7 @@ func (p *Proxy) newJobProxy(ctx *fasthttp.RequestCtx) *jobProxy {
 		wg:            &sync.WaitGroup{},
 	}
 
-	job.triage, job.res = p.triage(ctx.Request.Body())
+	job.triage, job.res = p.triage(ctx)
 
 	{ // prepare the request
 		job.req = fasthttp.AcquireRequest()
@@ -415,6 +415,7 @@ func (p *Proxy) newJobProxy(ctx *fasthttp.RequestCtx) *jobProxy {
 			zap.Bool("proxy", job.triage.Proxy),
 			zap.Bool("mirror", job.triage.Mirror),
 			zap.Uint64("connection_id", ctx.ConnID()),
+			zap.Uint64("request_id", ctx.ConnRequestNum()),
 			zap.String("remote_addr", ctx.RemoteAddr().String()),
 			zap.String("downstream_host", str(p.backendURI.Host())),
 			zap.String("jrpc_method", job.triage.JrpcMethod),

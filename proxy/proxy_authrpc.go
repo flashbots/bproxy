@@ -91,12 +91,17 @@ func (p *AuthrpcProxy) stop() {
 	p.tickerSeenHeads.Stop()
 }
 
-func (p *AuthrpcProxy) triage(body []byte) (
+func (p *AuthrpcProxy) triage(ctx *fasthttp.RequestCtx) (
 	triage *triaged.Request, res *fasthttp.Response,
 ) {
-	call, err := jrpc.Unmarshal(body)
+	l := p.Proxy.logger.With(
+		zap.Uint64("connection_id", ctx.ConnID()),
+		zap.Uint64("request_id", ctx.ConnRequestNum()),
+	)
+
+	call, err := jrpc.Unmarshal(ctx.Request.Body())
 	if err != nil { // proxy & don't mirror un-parse-able requests as-is
-		p.Proxy.logger.Warn("Failed to parse authrpc call body",
+		l.Warn("Failed to parse authrpc call body",
 			zap.Error(err),
 		)
 		return &triaged.Request{
@@ -136,8 +141,8 @@ func (p *AuthrpcProxy) triage(body []byte) (
 
 	case strings.HasPrefix(call.GetMethod(), "engine_forkchoiceUpdated"):
 		fcuv3 := jrpc.ForkchoiceUpdatedV3{}
-		if err := json.Unmarshal(body, &fcuv3); err != nil { // proxy & mirror FCUv3 we can't parse
-			p.Proxy.logger.Warn("Failed to parse FCU call body",
+		if err := json.Unmarshal(ctx.Request.Body(), &fcuv3); err != nil { // proxy & mirror FCUv3 we can't parse
+			l.Warn("Failed to parse FCU call body",
 				zap.Error(err),
 			)
 			return &triaged.Request{
@@ -153,7 +158,7 @@ func (p *AuthrpcProxy) triage(body []byte) (
 				if blockTimestamp, err := p1.GetTimestamp(); err == nil {
 					headsup := time.Until(blockTimestamp)
 					if headsup < 200*time.Millisecond {
-						p.Proxy.logger.Warn("Received FCU w/ extra param with less than 200ms to build the block",
+						l.Warn("Received FCU w/ extra param with less than 200ms to build the block",
 							zap.String("timestamp", p1.Timestamp),
 							zap.Duration("headsup", headsup),
 						)
@@ -168,12 +173,12 @@ func (p *AuthrpcProxy) triage(body []byte) (
 						Deadline:   blockTimestamp,
 					}, fasthttp.AcquireResponse()
 				} else {
-					p.Proxy.logger.Warn("Failed to parse block timestamp from FCU w/ extra param",
+					l.Warn("Failed to parse block timestamp from FCU w/ extra param",
 						zap.Error(err),
 					)
 				}
 			} else {
-				p.Proxy.logger.Warn("Failed to parse extra param of FCU",
+				l.Warn("Failed to parse extra param of FCU",
 					zap.Error(err),
 				)
 			}
@@ -193,7 +198,7 @@ func (p *AuthrpcProxy) triage(body []byte) (
 					//
 					// see also: https://github.com/paradigmxyz/reth/issues/15086
 					//
-					p.Proxy.logger.Warn("Ignoring FCUv3 w/o extra attributes b/c we already seen these hashes",
+					l.Warn("Ignoring FCUv3 w/o extra attributes b/c we already seen these hashes",
 						zap.String("head", h),
 						zap.String("safe", s),
 						zap.String("finalised", f),
@@ -201,7 +206,7 @@ func (p *AuthrpcProxy) triage(body []byte) (
 					return &triaged.Request{}, p.interceptEngineForkchoiceUpdatedV3(call, h)
 				}
 			} else {
-				p.Proxy.logger.Warn("Failed to parse parameter 0 of FCUv3",
+				l.Warn("Failed to parse parameter 0 of FCUv3",
 					zap.Error(err),
 				)
 			}

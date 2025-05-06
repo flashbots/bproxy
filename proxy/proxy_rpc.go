@@ -66,50 +66,55 @@ func (p *RpcProxy) Observe(ctx context.Context, o otelapi.Observer) error {
 	return p.Proxy.Observe(ctx, o)
 }
 
-func (p *RpcProxy) triage(body []byte) (*triaged.Request, *fasthttp.Response) {
+func (p *RpcProxy) triage(ctx *fasthttp.RequestCtx) (*triaged.Request, *fasthttp.Response) {
+	l := p.Proxy.logger.With(
+		zap.Uint64("connection_id", ctx.ConnID()),
+		zap.Uint64("request_id", ctx.ConnRequestNum()),
+	)
+
 	errs := make([]error, 0)
 
 	{ // jrpc id as `uint64`
 		singleShot := &jrpc.CallWithIdAsUint64{}
-		err := json.Unmarshal(body, singleShot)
+		err := json.Unmarshal(ctx.Request.Body(), singleShot)
 		if err == nil {
-			return p.triageSingle(singleShot)
+			return p.triageSingle(singleShot, l)
 		}
 		errs = append(errs, err)
 
 		batch := []jrpc.CallWithIdAsUint64{}
-		err = json.Unmarshal(body, &batch)
+		err = json.Unmarshal(ctx.Request.Body(), &batch)
 		if err == nil {
 			_batch := make([]jrpc.Call, 0, len(batch))
 			for _, call := range batch {
 				_batch = append(_batch, call)
 			}
-			return p.triageBatch(_batch)
+			return p.triageBatch(_batch, l)
 		}
 		errs = append(errs, err)
 	}
 
 	{ // jrpc id as `string`
 		singleShot := &jrpc.CallWithIdAsString{}
-		err := json.Unmarshal(body, singleShot)
+		err := json.Unmarshal(ctx.Request.Body(), singleShot)
 		if err == nil {
-			return p.triageSingle(singleShot)
+			return p.triageSingle(singleShot, l)
 		}
 		errs = append(errs, err)
 
 		batch := []jrpc.CallWithIdAsString{}
-		err = json.Unmarshal(body, &batch)
+		err = json.Unmarshal(ctx.Request.Body(), &batch)
 		if err == nil {
 			_batch := make([]jrpc.Call, 0, len(batch))
 			for _, call := range batch {
 				_batch = append(_batch, call)
 			}
-			return p.triageBatch(_batch)
+			return p.triageBatch(_batch, l)
 		}
 		errs = append(errs, err)
 	}
 
-	p.Proxy.logger.Warn("Failed to parse rpc call body",
+	l.Warn("Failed to parse rpc call body",
 		zap.Errors("errors", errs),
 	)
 
@@ -119,7 +124,7 @@ func (p *RpcProxy) triage(body []byte) (*triaged.Request, *fasthttp.Response) {
 	}, fasthttp.AcquireResponse()
 }
 
-func (p *RpcProxy) triageSingle(call jrpc.Call) (*triaged.Request, *fasthttp.Response) {
+func (p *RpcProxy) triageSingle(call jrpc.Call, l *zap.Logger) (*triaged.Request, *fasthttp.Response) {
 	if call.GetMethod() == "tee_getDcapQuote" {
 		return &triaged.Request{
 			JrpcMethod: call.GetMethod(),
@@ -152,7 +157,7 @@ func (p *RpcProxy) triageSingle(call jrpc.Call) (*triaged.Request, *fasthttp.Res
 			Nonce: tx.Nonce(),
 		}}
 	} else {
-		p.Proxy.logger.Warn("Failed to decode eth_sendRawTransaction",
+		l.Warn("Failed to decode eth_sendRawTransaction",
 			zap.Error(err),
 		)
 	}
@@ -160,7 +165,7 @@ func (p *RpcProxy) triageSingle(call jrpc.Call) (*triaged.Request, *fasthttp.Res
 	return res, fasthttp.AcquireResponse()
 }
 
-func (p *RpcProxy) triageBatch(batch []jrpc.Call) (*triaged.Request, *fasthttp.Response) {
+func (p *RpcProxy) triageBatch(batch []jrpc.Call, l *zap.Logger) (*triaged.Request, *fasthttp.Response) {
 	if len(batch) == 0 {
 		// no need to proxy empty batches
 		return &triaged.Request{}, fasthttp.AcquireResponse()
@@ -203,7 +208,7 @@ func (p *RpcProxy) triageBatch(batch []jrpc.Call) (*triaged.Request, *fasthttp.R
 				Nonce: tx.Nonce(),
 			})
 		} else {
-			p.Proxy.logger.Warn("Failed to decode eth_sendRawTransaction",
+			l.Warn("Failed to decode eth_sendRawTransaction",
 				zap.Error(err),
 			)
 		}
