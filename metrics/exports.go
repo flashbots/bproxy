@@ -22,4 +22,6 @@ var (
 
 	TLSValidNotAfter  otelapi.Int64ObservableGauge
 	TLSValidNotBefore otelapi.Int64ObservableGauge
+
+	LateFCUCount otelapi.Int64Counter
 )

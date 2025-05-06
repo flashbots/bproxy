@@ -9,9 +9,11 @@ import (
 	"time"
 
 	"github.com/flashbots/bproxy/jrpc"
+	"github.com/flashbots/bproxy/metrics"
 	"github.com/flashbots/bproxy/triaged"
 
 	"github.com/valyala/fasthttp"
+	"go.opentelemetry.io/otel/attribute"
 	otelapi "go.opentelemetry.io/otel/metric"
 	"go.uber.org/zap"
 )
@@ -149,6 +151,16 @@ func (p *AuthrpcProxy) triage(body []byte) (
 			p1 := jrpc.ForkchoiceUpdatedV3Param1{}
 			if err := json.Unmarshal(fcuv3.Params[1], &p1); err == nil {
 				if blockTimestamp, err := p1.GetTimestamp(); err == nil {
+					headsup := time.Until(blockTimestamp)
+					if headsup < 200*time.Millisecond {
+						p.Proxy.logger.Warn("Received FCU w/ extra param with less than 200ms to build the block",
+							zap.String("timestamp", p1.Timestamp),
+							zap.Duration("headsup", headsup),
+						)
+						metrics.LateFCUCount.Add(context.TODO(), 1, otelapi.WithAttributes(
+							attribute.KeyValue{Key: "proxy", Value: attribute.StringValue(p.Proxy.cfg.Name)},
+						))
+					}
 					return &triaged.Request{
 						Proxy:      true,
 						Prioritise: true,

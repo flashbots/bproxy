@@ -35,6 +35,7 @@ func Setup(
 		setupFrontendConnectionsCount,
 		setupTLSValidNotAfter,
 		setupTLSValidNotBefore,
+		setupLateFCUCount,
 	} {
 		if err := setup(ctx); err != nil {
 			return err
@@ -214,5 +215,16 @@ func setupTLSValidNotBefore(ctx context.Context) error {
 		return err
 	}
 	TLSValidNotBefore = m
+	return nil
+}
+
+func setupLateFCUCount(ctx context.Context) error {
+	m, err := meter.Int64Counter("late_fcu_count",
+		otelapi.WithDescription("count of late fcu messages"),
+	)
+	if err != nil {
+		return err
+	}
+	LateFCUCount = m
 	return nil
 }
