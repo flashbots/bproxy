@@ -3,8 +3,8 @@ package proxy
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -89,142 +89,121 @@ func (p *AuthrpcProxy) stop() {
 	p.tickerSeenHeads.Stop()
 }
 
-func (p *AuthrpcProxy) triage(body []byte) (*triaged.Request, *fasthttp.Response) {
-	var call jrpc.Call
-
-	{ // proxy & don't mirror un-parse-able requests as-is
-		_call := jrpc.CallWithIdAsUint64{}
-		if err_Uint64 := json.Unmarshal(body, &_call); err_Uint64 == nil {
-			call = _call
-		} else {
-			_jrpc := jrpc.CallWithIdAsString{}
-			if err_String := json.Unmarshal(body, &_jrpc); err_String == nil {
-				call = _jrpc
-			} else {
-				p.Proxy.logger.Warn("Failed to parse authrpc call body",
-					zap.Error(errors.Join(err_Uint64, err_String)),
-				)
-				return &triaged.Request{
-					Proxy: true,
-				}, fasthttp.AcquireResponse()
-			}
-		}
+func (p *AuthrpcProxy) triage(body []byte) (
+	triage *triaged.Request, res *fasthttp.Response,
+) {
+	call, err := jrpc.Unmarshal(body)
+	if err != nil { // proxy & don't mirror un-parse-able requests as-is
+		p.Proxy.logger.Warn("Failed to parse authrpc call body",
+			zap.Error(err),
+		)
+		return &triaged.Request{
+			Proxy: true,
+		}, fasthttp.AcquireResponse()
 	}
 
-	switch call.GetMethod() {
-	default:
-		// only proxy
+	defer func() {
+		triage.JrpcID = call.GetID()
+		triage.JrpcMethod = call.GetMethod()
+	}()
+
+	switch {
+	default: // only proxy by default
 		return &triaged.Request{
-			Proxy:      true,
-			JrpcMethod: call.GetMethod(),
-			JrpcID:     call.GetID(),
+			Proxy: true,
 		}, fasthttp.AcquireResponse()
 
-	case "engine_getPayloadV3":
-		// only proxy
-		return &triaged.Request{
-			Proxy:      true,
-			Prioritise: true,
-			JrpcMethod: call.GetMethod(),
-			JrpcID:     call.GetID(),
-		}, fasthttp.AcquireResponse()
-
-	case "engine_getPayloadV4":
+	case strings.HasPrefix(call.GetMethod(), "engine_getPayload"): // proxy with priority
 		return &triaged.Request{
 			Proxy:      true,
 			Prioritise: true,
-			JrpcMethod: call.GetMethod(),
-			JrpcID:     call.GetID(),
 		}, fasthttp.AcquireResponse()
 
-	case "engine_newPayloadV3":
-		// proxy & mirror
+	case strings.HasPrefix(call.GetMethod(), "engine_newPayload"): // proxy & mirror with priority
 		return &triaged.Request{
 			Proxy:      true,
 			Prioritise: true,
 			Mirror:     true,
-			JrpcMethod: call.GetMethod(),
-			JrpcID:     call.GetID(),
 		}, fasthttp.AcquireResponse()
 
-	case "engine_newPayloadV4":
-		// proxy & mirror
+	case strings.HasPrefix(call.GetMethod(), "miner_setMaxDASize"): // proxy & mirror
 		return &triaged.Request{
-			Proxy:      true,
-			Prioritise: true,
-			Mirror:     true,
-			JrpcMethod: call.GetMethod(),
-			JrpcID:     call.GetID(),
+			Proxy:  true,
+			Mirror: true,
 		}, fasthttp.AcquireResponse()
 
-	case "miner_setMaxDASize":
-		// proxy & mirror
-		return &triaged.Request{
-			Proxy:      true,
-			Mirror:     true,
-			JrpcMethod: call.GetMethod(),
-			JrpcID:     call.GetID(),
-		}, fasthttp.AcquireResponse()
-
-	case "engine_forkchoiceUpdatedV3":
-		{ // proxy & mirror FCUv3 with extra attributes (or FCUv3 we can't parse)
-			fcuv3 := jrpc.ForkchoiceUpdatedV3{}
-			err := json.Unmarshal(body, &fcuv3)
-			if err != nil {
-				p.Proxy.logger.Warn("Failed to parse FCUv3 call body",
-					zap.Error(err),
-				)
-			}
-
-			if err != nil || fcuv3.HasExtraParam() {
-				return &triaged.Request{
-					Proxy:      true,
-					Prioritise: true,
-					Mirror:     true,
-					JrpcMethod: call.GetMethod(),
-					JrpcID:     call.GetID(),
-				}, fasthttp.AcquireResponse()
-			}
-		}
-
-		fcuv3 := jrpc.ForkchoiceUpdatedV3WithoutExtraParam{}
-		if err := json.Unmarshal(body, &fcuv3); err != nil {
-			p.Proxy.logger.Warn("Failed to parse call body of FCUv3 w/o extra attributes",
+	case strings.HasPrefix(call.GetMethod(), "engine_forkchoiceUpdated"):
+		fcuv3 := jrpc.ForkchoiceUpdatedV3{}
+		if err := json.Unmarshal(body, &fcuv3); err != nil { // proxy & mirror FCUv3 we can't parse
+			p.Proxy.logger.Warn("Failed to parse FCU call body",
 				zap.Error(err),
 			)
 			return &triaged.Request{
-				Proxy:      true,
-				Mirror:     true,
-				JrpcMethod: call.GetMethod(),
-				JrpcID:     call.GetID(),
+				Proxy:  true,
+				Mirror: true,
 			}, fasthttp.AcquireResponse()
 		}
 
-		//
-		// don't mirror or proxy FCUv3 w/o extra attrs which we already seen
-		//
-		// see also: https://github.com/paradigmxyz/reth/issues/15086
-		//
-		head, safe, finalised := fcuv3.BlockHashes()
-		if p.alreadySeen(head, safe, finalised) {
-			p.Proxy.logger.Warn("Ignoring FCUv3 w/o extra attributes b/c we already seen these hashes",
-				zap.String("head", head),
-				zap.String("safe", safe),
-				zap.String("finalised", finalised),
-			)
-
+		switch len(fcuv3.Params) {
+		case 2:
+			p1 := jrpc.ForkchoiceUpdatedV3Param1{}
+			if err := json.Unmarshal(fcuv3.Params[1], &p1); err == nil {
+				if blockTimestamp, err := p1.GetTimestamp(); err == nil {
+					return &triaged.Request{
+						Proxy:      true,
+						Prioritise: true,
+						Mirror:     true,
+						Deadline:   blockTimestamp,
+					}, fasthttp.AcquireResponse()
+				} else {
+					p.Proxy.logger.Warn("Failed to parse block timestamp from FCU w/ extra param",
+						zap.Error(err),
+					)
+				}
+			} else {
+				p.Proxy.logger.Warn("Failed to parse extra param of FCU",
+					zap.Error(err),
+				)
+			}
 			return &triaged.Request{
-				JrpcMethod: call.GetMethod(),
-				JrpcID:     call.GetID(),
-			}, p.interceptEngineForkchoiceUpdatedV3(call, head)
-		}
+				Proxy:      true,
+				Prioritise: true,
+				Mirror:     true,
+			}, fasthttp.AcquireResponse()
 
-		return &triaged.Request{
-			Proxy:      true,
-			Mirror:     true,
-			JrpcMethod: call.GetMethod(),
-			JrpcID:     call.GetID(),
-		}, fasthttp.AcquireResponse()
+		case 1:
+			p0 := jrpc.ForkchoiceUpdatedV3Param0{}
+			if err := json.Unmarshal(fcuv3.Params[0], &p0); err == nil {
+				h, s, f := p0.GetHashes()
+				if p.alreadySeen(h, s, f) {
+					//
+					// don't mirror or proxy FCUv3 w/o extra attrs which we already seen
+					//
+					// see also: https://github.com/paradigmxyz/reth/issues/15086
+					//
+					p.Proxy.logger.Warn("Ignoring FCUv3 w/o extra attributes b/c we already seen these hashes",
+						zap.String("head", h),
+						zap.String("safe", s),
+						zap.String("finalised", f),
+					)
+					return &triaged.Request{}, p.interceptEngineForkchoiceUpdatedV3(call, h)
+				}
+			} else {
+				p.Proxy.logger.Warn("Failed to parse parameter 0 of FCUv3",
+					zap.Error(err),
+				)
+			}
+			return &triaged.Request{
+				Proxy:  true,
+				Mirror: true,
+			}, fasthttp.AcquireResponse()
+
+		default:
+			return &triaged.Request{
+				Proxy:  true,
+				Mirror: true,
+			}, fasthttp.AcquireResponse()
+		}
 	}
 }
 

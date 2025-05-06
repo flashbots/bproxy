@@ -1,26 +1,37 @@
 package jrpc
 
+import (
+	"encoding/json"
+	"strconv"
+	"strings"
+	"time"
+)
+
 type ForkchoiceUpdatedV3 struct {
-	Params []*struct{} `json:"params"`
+	Params []json.RawMessage `json:"params"`
 }
 
-type ForkchoiceUpdatedV3WithoutExtraParam struct {
-	Params []*struct {
-		HeadBlockHash      string `json:"headBlockHash"`
-		SafeBlockHash      string `json:"safeBlockHash"`
-		FinalizedBlockHash string `json:"finalizedBlockHash"`
-	} `json:"params"`
+type ForkchoiceUpdatedV3Param0 struct {
+	HeadBlockHash      string `json:"headBlockHash"`
+	SafeBlockHash      string `json:"safeBlockHash"`
+	FinalizedBlockHash string `json:"finalizedBlockHash"`
 }
 
-func (fcuv3 ForkchoiceUpdatedV3) HasExtraParam() bool {
-	return len(fcuv3.Params) == 2 && fcuv3.Params[0] != nil && fcuv3.Params[1] != nil
+func (p ForkchoiceUpdatedV3Param0) GetHashes() (head, safe, finalized string) {
+	return p.HeadBlockHash, p.SafeBlockHash, p.FinalizedBlockHash
 }
 
-func (fcuv3 ForkchoiceUpdatedV3WithoutExtraParam) BlockHashes() (head, safe, finalized string) {
-	for _, p := range fcuv3.Params {
-		if p != nil {
-			return p.HeadBlockHash, p.SafeBlockHash, p.FinalizedBlockHash
-		}
+type ForkchoiceUpdatedV3Param1 struct {
+	Timestamp string `json:"timestamp"`
+}
+
+func (p ForkchoiceUpdatedV3Param1) GetTimestamp() (time.Time, error) {
+	epoch, err := strconv.ParseInt(
+		strings.TrimPrefix(p.Timestamp, "0x"),
+		16, 64,
+	)
+	if err != nil {
+		return time.Time{}, err
 	}
-	return "", "", ""
+	return time.Unix(epoch, 0), nil
 }

@@ -426,6 +426,14 @@ func (p *Proxy) newJobProxy(ctx *fasthttp.RequestCtx) *jobProxy {
 			)
 		}
 
+		if !job.triage.Deadline.IsZero() {
+			headsup := time.Until(job.triage.Deadline)
+			loggedFields = append(loggedFields,
+				zap.Time("deadline", job.triage.Deadline),
+				zap.Duration("headsup", headsup),
+			)
+		}
+
 		job.log = p.logger.With(loggedFields...)
 	}
 
