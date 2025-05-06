@@ -16,6 +16,7 @@ import (
 type Proxy struct {
 	BackendTimeout                  time.Duration `yaml:"backend_timeout"`
 	BackendURL                      string        `yaml:"backend_url"`
+	ClientIdleConnectionTimeout     time.Duration `yaml:"client_idle_connection_timeout"`
 	Enabled                         bool          `yaml:"enabled"`
 	ExtraMirroredJrpcMethods        []string      `yaml:"extra_mirrored_jrpc_methods"`
 	HealthcheckInterval             time.Duration `yaml:"healthcheck_interval"`
@@ -41,6 +42,7 @@ var (
 	errProxyFailedToGetLocalIPs                    = errors.New("failed to get local ip addresses")
 	errProxyInvalidBackendTimeout                  = errors.New("invalid backend timeout")
 	errProxyInvalidBackendURL                      = errors.New("invalid backend url")
+	errProxyInvalidClientIdleConnectionTimeout     = errors.New("invalid client connection idle timeout")
 	errProxyInvalidHealthcheckInterval             = errors.New("invalid healthcheck interval")
 	errProxyInvalidHealthcheckThresholdHealthy     = errors.New("invalid healthcheck healthy threshold")
 	errProxyInvalidHealthcheckThresholdUnhealthy   = errors.New("invalid healthcheck unhealthy threshold")
@@ -134,6 +136,19 @@ func (cfg *Proxy) Validate() error {
 			idx++
 		}
 		cfg.PeerURLs = cfg.PeerURLs[:idx]
+	}
+
+	{ // ClientIdleConnectionTimeout
+		if cfg.ClientIdleConnectionTimeout <= 0 {
+			errs = append(errs, fmt.Errorf("%w: can't be negative: %s",
+				errProxyInvalidClientIdleConnectionTimeout, cfg.ClientIdleConnectionTimeout,
+			))
+		}
+		if cfg.ClientIdleConnectionTimeout > 60*time.Hour {
+			errs = append(errs, fmt.Errorf("%w: too high, must be <=60m: %s",
+				errProxyInvalidClientIdleConnectionTimeout, cfg.ClientIdleConnectionTimeout,
+			))
+		}
 	}
 
 	{ // HealthcheckInterval

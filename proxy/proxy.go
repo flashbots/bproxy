@@ -80,7 +80,7 @@ func newProxy(cfg *Config) (*Proxy, error) {
 	p.frontend = &fasthttp.Server{
 		ConnState:          p.upstreamConnectionChanged,
 		Handler:            p.receive,
-		IdleTimeout:        30 * time.Second,
+		IdleTimeout:        cfg.Proxy.ClientIdleConnectionTimeout,
 		Logger:             logutils.FasthttpLogger(l),
 		MaxConnsPerIP:      cfg.Proxy.MaxClientConnectionsPerIP,
 		MaxRequestBodySize: cfg.Proxy.MaxRequestSizeMb * 1024 * 1024,

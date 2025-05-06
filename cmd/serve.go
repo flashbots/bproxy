@@ -44,6 +44,15 @@ func CommandServe(cfg *config.Config) *cli.Command {
 				Value:       time.Second,
 			},
 
+			&cli.DurationFlag{ // --xxx-client-idle-connection-timeout
+				Category:    strings.ToUpper(category),
+				Destination: &cfg.ClientIdleConnectionTimeout,
+				EnvVars:     []string{envPrefix + strings.ToUpper(category) + "_CLIENT_IDLE_CONNECTION_TIMEOUT"},
+				Name:        category + "-client-idle-connection-timeout",
+				Usage:       "`duration` to keep idle " + category + " connections open",
+				Value:       30 * time.Second,
+			},
+
 			&cli.BoolFlag{ // --xxx-enabled
 				Category:    strings.ToUpper(category),
 				Destination: &cfg.Enabled,
@@ -170,7 +179,7 @@ func CommandServe(cfg *config.Config) *cli.Command {
 				Value:       160,
 			},
 
-			&cli.BoolFlag{
+			&cli.BoolFlag{ // --peer-tls-insecure-skip-verify
 				Category:    strings.ToUpper(category),
 				Destination: &cfg.PeerTLSInsecureSkipVerify,
 				EnvVars:     []string{envPrefix + strings.ToUpper(category) + "_PEER_TLS_INSECURE_SKIP_VERIFY"},
