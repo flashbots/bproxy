@@ -5,10 +5,23 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/flashbots/bproxy/utils"
 )
 
 type ForkchoiceUpdatedV3 struct {
 	Params []json.RawMessage `json:"params"`
+}
+
+func (fcuv3 ForkchoiceUpdatedV3) ParamsCount() int {
+	res := 0
+	for _, param := range fcuv3.Params {
+		if utils.Str(param) == "null" {
+			continue
+		}
+		res++
+	}
+	return res
 }
 
 type ForkchoiceUpdatedV3Param0 struct {

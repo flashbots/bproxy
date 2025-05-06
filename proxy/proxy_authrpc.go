@@ -151,7 +151,7 @@ func (p *AuthrpcProxy) triage(ctx *fasthttp.RequestCtx) (
 			}, fasthttp.AcquireResponse()
 		}
 
-		switch len(fcuv3.Params) {
+		switch fcuv3.ParamsCount() {
 		case 2:
 			p1 := jrpc.ForkchoiceUpdatedV3Param1{}
 			if err := json.Unmarshal(fcuv3.Params[1], &p1); err == nil {

@@ -18,6 +18,7 @@ import (
 	"github.com/flashbots/bproxy/logutils"
 	"github.com/flashbots/bproxy/metrics"
 	"github.com/flashbots/bproxy/triaged"
+	"github.com/flashbots/bproxy/utils"
 
 	"github.com/valyala/fasthttp"
 	"go.opentelemetry.io/otel/attribute"
@@ -146,7 +147,7 @@ func newProxy(cfg *Config) (*Proxy, error) {
 				}
 				return nil, err
 			}
-			host := str(peerURI.Host())
+			host := utils.Str(peerURI.Host())
 
 			p.peerURIs[host] = peerURI
 			p.queueMirrorHi[host] = make(chan *jobMirror, 512)
@@ -359,8 +360,8 @@ func (p *Proxy) newJobProxy(ctx *fasthttp.RequestCtx) *jobProxy {
 		job.req.SetTimeout(p.cfg.Proxy.BackendTimeout)
 		job.req.SetURI(p.backendURI)
 		job.req.Header.Add("x-forwarded-for", ctx.RemoteIP().String())
-		job.req.Header.Add("x-forwarded-host", str(ctx.Host()))
-		job.req.Header.Add("x-forwarded-proto", str(ctx.Request.URI().Scheme()))
+		job.req.Header.Add("x-forwarded-host", utils.Str(ctx.Host()))
+		job.req.Header.Add("x-forwarded-proto", utils.Str(ctx.Request.URI().Scheme()))
 	}
 
 	loggedFields := make([]zap.Field, 0, 12)
@@ -417,7 +418,7 @@ func (p *Proxy) newJobProxy(ctx *fasthttp.RequestCtx) *jobProxy {
 			zap.Uint64("connection_id", ctx.ConnID()),
 			zap.Uint64("request_id", ctx.ConnRequestNum()),
 			zap.String("remote_addr", ctx.RemoteAddr().String()),
-			zap.String("downstream_host", str(p.backendURI.Host())),
+			zap.String("downstream_host", utils.Str(p.backendURI.Host())),
 			zap.String("jrpc_method", job.triage.JrpcMethod),
 		)
 
@@ -453,12 +454,12 @@ func (p *Proxy) newJobMirror(ctx *fasthttp.RequestCtx, pjob *jobProxy, uri *fast
 	ctx.Request.CopyTo(req)
 	req.SetURI(uri)
 	req.Header.Add("x-forwarded-for", ctx.RemoteIP().String())
-	req.Header.Add("x-forwarded-host", str(ctx.Host()))
-	req.Header.Add("x-forwarded-proto", str(ctx.Request.URI().Scheme()))
+	req.Header.Add("x-forwarded-host", utils.Str(ctx.Host()))
+	req.Header.Add("x-forwarded-proto", utils.Str(ctx.Request.URI().Scheme()))
 
 	return &jobMirror{
 		log:                  pjob.log,
-		host:                 str(uri.Host()),
+		host:                 utils.Str(uri.Host()),
 		req:                  req,
 		res:                  res,
 		jrpcMethodForMetrics: pjob.jrpcMethodForMetrics,
@@ -525,7 +526,7 @@ func (p *Proxy) execJobProxy(job *jobProxy) {
 	loggedFields := make([]zap.Field, 0, 12)
 
 	if err != nil {
-		switch str(job.req.Header.ContentType()) {
+		switch utils.Str(job.req.Header.ContentType()) {
 		case "application/json":
 			job.res.SetStatusCode(fasthttp.StatusAccepted)
 			job.res.SetBody([]byte(fmt.Sprintf(`{"jsonrpc":"2.0","error":{"code":-32042,"message":%s}}`, strconv.Quote(err.Error()))))
@@ -558,7 +559,7 @@ func (p *Proxy) execJobProxy(job *jobProxy) {
 			} else {
 				loggedFields = append(loggedFields,
 					zap.NamedError("error_unmarshal", err),
-					zap.String("http_request", str(job.req.Body())),
+					zap.String("http_request", utils.Str(job.req.Body())),
 				)
 			}
 		}
@@ -566,7 +567,7 @@ func (p *Proxy) execJobProxy(job *jobProxy) {
 		if p.cfg.Proxy.LogResponses {
 			var body []byte
 
-			switch str(job.res.Header.ContentEncoding()) {
+			switch utils.Str(job.res.Header.ContentEncoding()) {
 			default:
 				body = job.res.Body()
 			case "gzip":
@@ -587,7 +588,7 @@ func (p *Proxy) execJobProxy(job *jobProxy) {
 				} else {
 					loggedFields = append(loggedFields,
 						zap.NamedError("error_unmarshal", err),
-						zap.String("http_response", str(body)),
+						zap.String("http_response", utils.Str(body)),
 					)
 				}
 			}
@@ -638,7 +639,7 @@ func (p *Proxy) execJobMirror(job *jobMirror) {
 			)
 
 			if p.cfg.Proxy.LogResponses {
-				switch str(job.res.Header.ContentEncoding()) {
+				switch utils.Str(job.res.Header.ContentEncoding()) {
 				default:
 					var jsonResponse interface{}
 					if err := json.Unmarshal(job.res.Body(), &jsonResponse); err == nil {
@@ -647,7 +648,7 @@ func (p *Proxy) execJobMirror(job *jobMirror) {
 						)
 					} else {
 						loggedFields = append(loggedFields,
-							zap.String("http_response", str(job.res.Body())),
+							zap.String("http_response", utils.Str(job.res.Body())),
 						)
 					}
 
@@ -660,7 +661,7 @@ func (p *Proxy) execJobMirror(job *jobMirror) {
 							)
 						} else {
 							loggedFields = append(loggedFields,
-								zap.String("http_response", str(body)),
+								zap.String("http_response", utils.Str(body)),
 							)
 						}
 					} else {
@@ -689,7 +690,7 @@ func (p *Proxy) execJobMirror(job *jobMirror) {
 				)
 			} else {
 				loggedFields = append(loggedFields,
-					zap.String("http_request", str(job.req.Body())),
+					zap.String("http_request", utils.Str(job.req.Body())),
 				)
 			}
 		}
