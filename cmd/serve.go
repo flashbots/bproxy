@@ -222,6 +222,14 @@ func CommandServe(cfg *config.Config) *cli.Command {
 				Name:        category + "-tls-key",
 				Usage:       "`path` to tls key",
 			},
+
+			&cli.BoolFlag{ // --xxx-use-priority-queue
+				Category:    strings.ToUpper(category),
+				Destination: &cfg.UsePriorityQueue,
+				EnvVars:     []string{envPrefix + strings.ToUpper(category) + "_USE_PRIORITY_QUEUE"},
+				Name:        category + "-use-priority-queue",
+				Usage:       `whether to prioritise "important" calls over the rest`,
+			},
 		}
 
 		return
@@ -232,7 +240,7 @@ func CommandServe(cfg *config.Config) *cli.Command {
 	)
 
 	authrpcFlags = append(authrpcFlags,
-		&cli.BoolFlag{
+		&cli.BoolFlag{ // --authrpc-deduplicate-fcus
 			Category:    strings.ToUpper(categoryAuthRPC),
 			Destination: &cfg.AuthrpcProxy.DeduplicateFCUs,
 			EnvVars:     []string{envPrefix + strings.ToUpper(categoryAuthRPC) + "_DEDUPLICATE_FCUS"},

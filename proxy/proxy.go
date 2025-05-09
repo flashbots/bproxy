@@ -230,41 +230,66 @@ func (p *Proxy) Run(ctx context.Context, failure chan<- error) {
 		l.Info("Proxy is down")
 	}()
 
-	go func() { // run the proxy job loop
-		for {
-			select {
-			case job := <-p.queueProxyHi:
-				p.execJobProxy(job)
-			default:
+	if p.cfg.proxy.UsePriorityQueue {
+		go func() { // run the proxy job loop with priority queue
+			for {
+				var job *jobProxy
 				select {
-				case job := <-p.queueProxyHi:
-					p.execJobProxy(job)
-				case job := <-p.queueProxyLo:
-					p.execJobProxy(job)
+				case job = <-p.queueProxyHi:
+				default:
+					select {
+					case job = <-p.queueProxyHi:
+					case job = <-p.queueProxyLo:
+					}
 				}
+				p.execJobProxy(job)
 			}
-		}
-	}()
+		}()
+	} else {
+		go func() { // run the proxy job loop without priority queue
+			for {
+				var job *jobProxy
+				select {
+				case job = <-p.queueProxyHi:
+				case job = <-p.queueProxyLo:
+				}
+				p.execJobProxy(job)
+			}
+		}()
+
+	}
 
 	for host := range p.peerURIs { // run the mirror job loops
 		queueMirrorHi := p.queueMirrorHi[host]
 		queueMirrorLo := p.queueMirrorLo[host]
 
-		go func() {
-			for {
-				select {
-				case job := <-queueMirrorHi:
-					p.execJobMirror(job)
-				default:
+		if p.cfg.proxy.UsePriorityQueue { // with priority queue
+			go func() {
+				var job *jobMirror
+				for {
 					select {
-					case job := <-queueMirrorHi:
-						p.execJobMirror(job)
-					case job := <-queueMirrorLo:
-						p.execJobMirror(job)
+					case job = <-queueMirrorHi:
+					default:
+						select {
+						case job = <-queueMirrorHi:
+						case job = <-queueMirrorLo:
+						}
 					}
+					p.execJobMirror(job)
 				}
-			}
-		}()
+			}()
+		} else { // without priority queue
+			go func() {
+				var job *jobMirror
+				for {
+					select {
+					case job = <-queueMirrorHi:
+					case job = <-queueMirrorLo:
+					}
+					p.execJobMirror(job)
+				}
+			}()
+		}
 	}
 
 	if p.cfg.proxy.HealthcheckURL != "" {

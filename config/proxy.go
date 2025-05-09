@@ -36,6 +36,7 @@ type Proxy struct {
 	RemoveBackendFromPeers          bool          `yaml:"remove_backend_from_peers"`
 	TLSCertificate                  string        `yaml:"tls_crt"`
 	TLSKey                          string        `yaml:"tls_key"`
+	UsePriorityQueue                bool          `yaml:"use_priority_queue"`
 }
 
 var (

@@ -35,6 +35,7 @@ OPTIONS:
    --authrpc-remove-backend-from-peers                                                              remove authrpc backend from peers (default: false) [$BPROXY_AUTHRPC_REMOVE_BACKEND_FROM_PEERS]
    --authrpc-tls-crt path                                                                           path to tls certificate (default: uses plain-text http) [$BPROXY_AUTHRPC_TLS_CRT]
    --authrpc-tls-key path                                                                           path to tls key (default: uses plain-text http) [$BPROXY_AUTHRPC_TLS_KEY]
+   --authrpc-use-priority-queue                                                                     whether to prioritise "important" calls over the rest (default: false) [$BPROXY_AUTHRPC_USE_PRIORITY_QUEUE]
 
    CHAOS
 
@@ -73,4 +74,5 @@ OPTIONS:
    --rpc-remove-backend-from-peers                                                          remove rpc backend from peers (default: false) [$BPROXY_RPC_REMOVE_BACKEND_FROM_PEERS]
    --rpc-tls-crt path                                                                       path to tls certificate (default: uses plain-text http) [$BPROXY_RPC_TLS_CRT]
    --rpc-tls-key path                                                                       path to tls key (default: uses plain-text http) [$BPROXY_RPC_TLS_KEY]
+   --rpc-use-priority-queue                                                                 whether to prioritise "important" calls over the rest (default: false) [$BPROXY_RPC_USE_PRIORITY_QUEUE]
 ```
