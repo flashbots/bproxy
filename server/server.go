@@ -38,12 +38,8 @@ func New(cfg *config.Config) (*Server, error) {
 		failure: make(chan error, 16),
 	}
 
-	if cfg.AuthRpcProxy.Enabled {
-		authrpc, err := proxy.NewAuthrpcProxy(&proxy.Config{
-			Name:  "bproxy-authrpc",
-			Chaos: s.cfg.Chaos,
-			Proxy: s.cfg.AuthRpcProxy,
-		})
+	if cfg.AuthrpcProxy.Enabled {
+		authrpc, err := proxy.NewAuthrpcProxy(s.cfg.AuthrpcProxy, s.cfg.Chaos)
 		if err != nil {
 			return nil, err
 		}
@@ -51,11 +47,7 @@ func New(cfg *config.Config) (*Server, error) {
 	}
 
 	if cfg.RpcProxy.Enabled {
-		rpc, err := proxy.NewRpcProxy(&proxy.Config{
-			Name:  "bproxy-rpc",
-			Chaos: s.cfg.Chaos,
-			Proxy: s.cfg.RpcProxy,
-		})
+		rpc, err := proxy.NewRpcProxy(s.cfg.RpcProxy, s.cfg.Chaos)
 		if err != nil {
 			return nil, err
 		}

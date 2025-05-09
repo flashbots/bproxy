@@ -2,9 +2,13 @@ package proxy
 
 import "github.com/flashbots/bproxy/config"
 
-type Config struct {
-	Name string
+type proxyConfig struct {
+	name string
 
-	Chaos *config.Chaos
-	Proxy *config.Proxy
+	chaos *config.Chaos
+	proxy *config.Proxy
+}
+
+type authrpcProxyConfig struct {
+	deduplicateFCUs bool
 }

@@ -228,7 +228,17 @@ func CommandServe(cfg *config.Config) *cli.Command {
 	}
 
 	authrpcFlags, extraMirroredJrpcMethodsAuthRPC, peerURLsAuthRPC := proxyFlags(
-		cfg.AuthRpcProxy, categoryAuthRPC, "http://127.0.0.1:18551", "0.0.0.0:8551",
+		cfg.AuthrpcProxy.Proxy, categoryAuthRPC, "http://127.0.0.1:18551", "0.0.0.0:8551",
+	)
+
+	authrpcFlags = append(authrpcFlags,
+		&cli.BoolFlag{
+			Category:    strings.ToUpper(categoryAuthRPC),
+			Destination: &cfg.AuthrpcProxy.DeduplicateFCUs,
+			EnvVars:     []string{envPrefix + strings.ToUpper(categoryAuthRPC) + "_DEDUPLICATE_FCUS"},
+			Name:        categoryAuthRPC + "-deduplicate-fcus",
+			Usage:       "deduplicate repetitive fcu messages",
+		},
 	)
 
 	chaosFlags := []cli.Flag{ // chaos
@@ -287,7 +297,7 @@ func CommandServe(cfg *config.Config) *cli.Command {
 	}
 
 	rpcFlags, extraMirroredJrpcMethodsRPC, peerURLsRPC := proxyFlags(
-		cfg.RpcProxy, categoryRPC, "http://127.0.0.1:18545", "0.0.0.0:8545",
+		cfg.RpcProxy.Proxy, categoryRPC, "http://127.0.0.1:18545", "0.0.0.0:8545",
 	)
 
 	metricsFlags := []cli.Flag{ // metrics
@@ -314,8 +324,8 @@ func CommandServe(cfg *config.Config) *cli.Command {
 		Flags: flags,
 
 		Before: func(_ *cli.Context) error {
-			cfg.AuthRpcProxy.PeerURLs = peerURLsAuthRPC.Value()
-			cfg.AuthRpcProxy.ExtraMirroredJrpcMethods = extraMirroredJrpcMethodsAuthRPC.Value()
+			cfg.AuthrpcProxy.PeerURLs = peerURLsAuthRPC.Value()
+			cfg.AuthrpcProxy.ExtraMirroredJrpcMethods = extraMirroredJrpcMethodsAuthRPC.Value()
 
 			cfg.RpcProxy.PeerURLs = peerURLsRPC.Value()
 			cfg.RpcProxy.ExtraMirroredJrpcMethods = extraMirroredJrpcMethodsRPC.Value()

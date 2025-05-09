@@ -9,8 +9,8 @@ type Config struct {
 	Chaos *Chaos `yaml:"chaos"`
 	Log   *Log   `yaml:"log"`
 
-	AuthRpcProxy *Proxy `yaml:"authrpc_proxy"`
-	RpcProxy     *Proxy `yaml:"rpc_proxy"`
+	AuthrpcProxy *AuthrpcProxy `yaml:"authrpc_proxy"`
+	RpcProxy     *RpcProxy     `yaml:"rpc_proxy"`
 
 	Metrics *Metrics `yaml:"metrics"`
 }
@@ -20,8 +20,8 @@ func New() *Config {
 		Chaos: &Chaos{},
 		Log:   &Log{},
 
-		AuthRpcProxy: &Proxy{},
-		RpcProxy:     &Proxy{},
+		AuthrpcProxy: &AuthrpcProxy{Proxy: &Proxy{}},
+		RpcProxy:     &RpcProxy{Proxy: &Proxy{}},
 
 		Metrics: &Metrics{},
 	}
@@ -32,7 +32,7 @@ var (
 )
 
 func (c *Config) Validate() error {
-	if !c.AuthRpcProxy.Enabled && !c.RpcProxy.Enabled {
+	if !c.AuthrpcProxy.Enabled && !c.RpcProxy.Enabled {
 		return errConfigNoEnabledProxy
 	}
 

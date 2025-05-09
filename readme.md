@@ -15,6 +15,7 @@ OPTIONS:
    --authrpc-backend url                                                                            url of authrpc backend (default: "http://127.0.0.1:18551") [$BPROXY_AUTHRPC_BACKEND]
    --authrpc-backend-timeout duration                                                               max duration for authrpc backend requests (default: 1s) [$BPROXY_AUTHRPC_BACKEND_TIMEOUT]
    --authrpc-client-idle-connection-timeout duration                                                duration to keep idle authrpc connections open (default: 30s) [$BPROXY_AUTHRPC_CLIENT_IDLE_CONNECTION_TIMEOUT]
+   --authrpc-deduplicate-fcus                                                                       deduplicate repetitive fcu messages (default: false) [$BPROXY_AUTHRPC_DEDUPLICATE_FCUS]
    --authrpc-enabled                                                                                enable authrpc proxy (default: false) [$BPROXY_AUTHRPC_ENABLED]
    --authrpc-extra-mirrored-jrpc-methods methods [ --authrpc-extra-mirrored-jrpc-methods methods ]  list of authrpc jrpc methods that will be mirrored in addition to the default [$BPROXY_AUTHRPC_EXTRA_MIRRORED_JRPC_METHODS]
    --authrpc-healthcheck url                                                                        url of authrpc backend healthcheck endpoint (default: disabled) [$BPROXY_AUTHRPC_HEALTHCHECK]

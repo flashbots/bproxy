@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/flashbots/bproxy/config"
 	"github.com/flashbots/bproxy/jrpc"
 	"github.com/flashbots/bproxy/metrics"
 	"github.com/flashbots/bproxy/triaged"
@@ -19,27 +20,41 @@ import (
 )
 
 type AuthrpcProxy struct {
-	Proxy *Proxy
+	proxy *Proxy
+
+	cfg *authrpcProxyConfig
 
 	seenHeads       map[string]time.Time
 	mxSeenHeads     sync.Mutex
 	tickerSeenHeads *time.Ticker
 }
 
-func NewAuthrpcProxy(cfg *Config) (*AuthrpcProxy, error) {
-	p, err := newProxy(cfg)
+func NewAuthrpcProxy(
+	cfg *config.AuthrpcProxy,
+	chaos *config.Chaos,
+) (*AuthrpcProxy, error) {
+	p, err := newProxy(&proxyConfig{
+		name:  "bproxy-authrpc",
+		proxy: cfg.Proxy,
+		chaos: chaos,
+	})
 	if err != nil {
 		return nil, err
 	}
 
 	ap := &AuthrpcProxy{
-		Proxy:           p,
+		proxy: p,
+
 		seenHeads:       make(map[string]time.Time, 60),
 		tickerSeenHeads: time.NewTicker(30 * time.Second),
+
+		cfg: &authrpcProxyConfig{
+			deduplicateFCUs: cfg.DeduplicateFCUs,
+		},
 	}
-	ap.Proxy.triage = ap.triage
-	ap.Proxy.run = ap.run
-	ap.Proxy.stop = ap.stop
+	ap.proxy.triage = ap.triage
+	ap.proxy.run = ap.run
+	ap.proxy.stop = ap.stop
 
 	return ap, nil
 }
@@ -48,28 +63,28 @@ func (p *AuthrpcProxy) Run(ctx context.Context, failure chan<- error) {
 	if p == nil {
 		return
 	}
-	p.Proxy.Run(ctx, failure)
+	p.proxy.Run(ctx, failure)
 }
 
 func (p *AuthrpcProxy) ResetConnections() {
 	if p == nil {
 		return
 	}
-	p.Proxy.ResetConnections()
+	p.proxy.ResetConnections()
 }
 
 func (p *AuthrpcProxy) Stop(ctx context.Context) error {
 	if p == nil {
 		return nil
 	}
-	return p.Proxy.Stop(ctx)
+	return p.proxy.Stop(ctx)
 }
 
 func (p *AuthrpcProxy) Observe(ctx context.Context, o otelapi.Observer) error {
 	if p == nil {
 		return nil
 	}
-	return p.Proxy.Observe(ctx, o)
+	return p.proxy.Observe(ctx, o)
 }
 
 func (p *AuthrpcProxy) run() {
@@ -94,7 +109,7 @@ func (p *AuthrpcProxy) stop() {
 func (p *AuthrpcProxy) triage(ctx *fasthttp.RequestCtx) (
 	triage *triaged.Request, res *fasthttp.Response,
 ) {
-	l := p.Proxy.logger.With(
+	l := p.proxy.logger.With(
 		zap.Uint64("connection_id", ctx.ConnID()),
 		zap.Uint64("request_id", ctx.ConnRequestNum()),
 	)
@@ -163,7 +178,7 @@ func (p *AuthrpcProxy) triage(ctx *fasthttp.RequestCtx) (
 							zap.Duration("headsup", headsup),
 						)
 						metrics.LateFCUCount.Add(context.TODO(), 1, otelapi.WithAttributes(
-							attribute.KeyValue{Key: "proxy", Value: attribute.StringValue(p.Proxy.cfg.Name)},
+							attribute.KeyValue{Key: "proxy", Value: attribute.StringValue(p.proxy.cfg.name)},
 						))
 					}
 					return &triaged.Request{
@@ -189,27 +204,30 @@ func (p *AuthrpcProxy) triage(ctx *fasthttp.RequestCtx) (
 			}, fasthttp.AcquireResponse()
 
 		case 1:
-			p0 := jrpc.ForkchoiceUpdatedV3Param0{}
-			if err := json.Unmarshal(fcuv3.Params[0], &p0); err == nil {
-				h, s, f := p0.GetHashes()
-				if p.alreadySeen(h, s, f) {
-					//
-					// don't mirror or proxy FCUv3 w/o extra attrs which we already seen
-					//
-					// see also: https://github.com/paradigmxyz/reth/issues/15086
-					//
-					l.Warn("Ignoring FCUv3 w/o extra attributes b/c we already seen these hashes",
-						zap.String("head", h),
-						zap.String("safe", s),
-						zap.String("finalised", f),
+			if p.cfg.deduplicateFCUs {
+				p0 := jrpc.ForkchoiceUpdatedV3Param0{}
+				if err := json.Unmarshal(fcuv3.Params[0], &p0); err == nil {
+					h, s, f := p0.GetHashes()
+					if p.alreadySeen(h, s, f) {
+						//
+						// don't mirror or proxy FCUv3 w/o extra attrs which we already seen
+						//
+						// see also: https://github.com/paradigmxyz/reth/issues/15086
+						//
+						l.Warn("Ignoring FCUv3 w/o extra attributes b/c we already seen these hashes",
+							zap.String("head", h),
+							zap.String("safe", s),
+							zap.String("finalised", f),
+						)
+						return &triaged.Request{}, p.interceptEngineForkchoiceUpdatedV3(call, h)
+					}
+				} else {
+					l.Warn("Failed to parse parameter 0 of FCUv3",
+						zap.Error(err),
 					)
-					return &triaged.Request{}, p.interceptEngineForkchoiceUpdatedV3(call, h)
 				}
-			} else {
-				l.Warn("Failed to parse parameter 0 of FCUv3",
-					zap.Error(err),
-				)
 			}
+
 			return &triaged.Request{
 				Proxy:  true,
 				Mirror: true,

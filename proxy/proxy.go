@@ -27,7 +27,7 @@ import (
 )
 
 type Proxy struct {
-	cfg *Config
+	cfg *proxyConfig
 
 	backend  *fasthttp.Client
 	frontend *fasthttp.Server
@@ -61,8 +61,8 @@ type Proxy struct {
 	queueMirrorLo map[string]chan *jobMirror
 }
 
-func newProxy(cfg *Config) (*Proxy, error) {
-	l := zap.L().With(zap.String("proxy_name", cfg.Name))
+func newProxy(cfg *proxyConfig) (*Proxy, error) {
+	l := zap.L().With(zap.String("proxy_name", cfg.name))
 
 	p := &Proxy{
 		cfg:                 cfg,
@@ -80,17 +80,17 @@ func newProxy(cfg *Config) (*Proxy, error) {
 	p.frontend = &fasthttp.Server{
 		ConnState:          p.upstreamConnectionChanged,
 		Handler:            p.receive,
-		IdleTimeout:        cfg.Proxy.ClientIdleConnectionTimeout,
+		IdleTimeout:        cfg.proxy.ClientIdleConnectionTimeout,
 		Logger:             logutils.FasthttpLogger(l),
-		MaxConnsPerIP:      cfg.Proxy.MaxClientConnectionsPerIP,
-		MaxRequestBodySize: cfg.Proxy.MaxRequestSizeMb * 1024 * 1024,
-		Name:               cfg.Name,
+		MaxConnsPerIP:      cfg.proxy.MaxClientConnectionsPerIP,
+		MaxRequestBodySize: cfg.proxy.MaxRequestSizeMb * 1024 * 1024,
+		Name:               cfg.name,
 		ReadTimeout:        5 * time.Second,
 		WriteTimeout:       5 * time.Second,
 	}
 
-	if cfg.Proxy.TLSCertificate != "" && cfg.Proxy.TLSKey != "" {
-		cert, err := cfg.Proxy.LoadTLSCertificate()
+	if cfg.proxy.TLSCertificate != "" && cfg.proxy.TLSKey != "" {
+		cert, err := cfg.proxy.LoadTLSCertificate()
 		if err != nil {
 			return nil, err
 		}
@@ -102,43 +102,43 @@ func newProxy(cfg *Config) (*Proxy, error) {
 	}
 
 	p.backend = &fasthttp.Client{
-		MaxConnsPerHost:     cfg.Proxy.MaxBackendConnectionsPerHost,
-		MaxConnWaitTimeout:  cfg.Proxy.MaxBackendConnectionWaitTimeout,
+		MaxConnsPerHost:     cfg.proxy.MaxBackendConnectionsPerHost,
+		MaxConnWaitTimeout:  cfg.proxy.MaxBackendConnectionWaitTimeout,
 		MaxIdleConnDuration: 30 * time.Second,
-		MaxResponseBodySize: cfg.Proxy.MaxResponseSizeMb * 1024 * 1024,
-		Name:                cfg.Name,
-		ReadTimeout:         cfg.Proxy.BackendTimeout,
+		MaxResponseBodySize: cfg.proxy.MaxResponseSizeMb * 1024 * 1024,
+		Name:                cfg.name,
+		ReadTimeout:         cfg.proxy.BackendTimeout,
 		WriteTimeout:        5 * time.Second,
 	}
 
 	p.backendURI = fasthttp.AcquireURI()
-	if err := p.backendURI.Parse(nil, []byte(cfg.Proxy.BackendURL)); err != nil {
+	if err := p.backendURI.Parse(nil, []byte(cfg.proxy.BackendURL)); err != nil {
 		fasthttp.ReleaseURI(p.backendURI)
 		return nil, err
 	}
 
-	if len(cfg.Proxy.PeerURLs) > 0 {
+	if len(cfg.proxy.PeerURLs) > 0 {
 		p.peer = &fasthttp.Client{
-			MaxConnsPerHost:     cfg.Proxy.MaxBackendConnectionsPerHost,
-			MaxConnWaitTimeout:  cfg.Proxy.MaxBackendConnectionWaitTimeout,
+			MaxConnsPerHost:     cfg.proxy.MaxBackendConnectionsPerHost,
+			MaxConnWaitTimeout:  cfg.proxy.MaxBackendConnectionWaitTimeout,
 			MaxIdleConnDuration: 30 * time.Second,
-			MaxResponseBodySize: cfg.Proxy.MaxResponseSizeMb * 1024 * 1024,
-			Name:                cfg.Name,
+			MaxResponseBodySize: cfg.proxy.MaxResponseSizeMb * 1024 * 1024,
+			Name:                cfg.name,
 			ReadTimeout:         5 * time.Second,
 			WriteTimeout:        5 * time.Second,
 		}
 
-		if cfg.Proxy.PeerTLSInsecureSkipVerify {
+		if cfg.proxy.PeerTLSInsecureSkipVerify {
 			p.peer.TLSConfig = &tls.Config{
 				InsecureSkipVerify: true,
 			}
 		}
 
-		p.peerURIs = make(map[string]*fasthttp.URI, len(cfg.Proxy.PeerURLs))
-		p.queueMirrorHi = make(map[string]chan *jobMirror, len(cfg.Proxy.PeerURLs))
-		p.queueMirrorLo = make(map[string]chan *jobMirror, len(cfg.Proxy.PeerURLs))
+		p.peerURIs = make(map[string]*fasthttp.URI, len(cfg.proxy.PeerURLs))
+		p.queueMirrorHi = make(map[string]chan *jobMirror, len(cfg.proxy.PeerURLs))
+		p.queueMirrorLo = make(map[string]chan *jobMirror, len(cfg.proxy.PeerURLs))
 
-		for _, peerURL := range cfg.Proxy.PeerURLs {
+		for _, peerURL := range cfg.proxy.PeerURLs {
 			peerURI := fasthttp.AcquireURI()
 			if err := peerURI.Parse(nil, []byte(peerURL)); err != nil {
 				fasthttp.ReleaseURI(p.backendURI)
@@ -155,9 +155,9 @@ func newProxy(cfg *Config) (*Proxy, error) {
 		}
 	}
 
-	if cfg.Proxy.HealthcheckURL != "" {
+	if cfg.proxy.HealthcheckURL != "" {
 		p.healthcheckURI = fasthttp.AcquireURI()
-		if err := p.healthcheckURI.Parse(nil, []byte(cfg.Proxy.HealthcheckURL)); err != nil {
+		if err := p.healthcheckURI.Parse(nil, []byte(cfg.proxy.HealthcheckURL)); err != nil {
 			fasthttp.ReleaseURI(p.backendURI)
 			for _, uri := range p.peerURIs {
 				fasthttp.ReleaseURI(uri)
@@ -168,19 +168,19 @@ func newProxy(cfg *Config) (*Proxy, error) {
 
 		p.healthcheck = &fasthttp.Client{
 			MaxConnsPerHost:     1,
-			MaxConnWaitTimeout:  cfg.Proxy.HealthcheckInterval / 2,
-			MaxIdleConnDuration: 2 * cfg.Proxy.HealthcheckInterval,
+			MaxConnWaitTimeout:  cfg.proxy.HealthcheckInterval / 2,
+			MaxIdleConnDuration: 2 * cfg.proxy.HealthcheckInterval,
 			MaxResponseBodySize: 4096,
-			Name:                cfg.Name + "-healthcheck",
-			ReadTimeout:         cfg.Proxy.HealthcheckInterval / 2,
-			WriteTimeout:        cfg.Proxy.HealthcheckInterval / 2,
+			Name:                cfg.name + "-healthcheck",
+			ReadTimeout:         cfg.proxy.HealthcheckInterval / 2,
+			WriteTimeout:        cfg.proxy.HealthcheckInterval / 2,
 		}
 
-		p.healthcheckTicker = time.NewTicker(cfg.Proxy.HealthcheckInterval)
+		p.healthcheckTicker = time.NewTicker(cfg.proxy.HealthcheckInterval)
 
 		p.healthcheckDepth = max(
-			p.cfg.Proxy.HealthcheckThresholdHealthy,
-			p.cfg.Proxy.HealthcheckThresholdUnhealthy,
+			p.cfg.proxy.HealthcheckThresholdHealthy,
+			p.cfg.proxy.HealthcheckThresholdUnhealthy,
 		)
 
 		p.healthcheckStatuses = data.NewRingBuffer[bool](p.healthcheckDepth)
@@ -188,9 +188,9 @@ func newProxy(cfg *Config) (*Proxy, error) {
 		p.isHealthy = true
 	}
 
-	if len(cfg.Proxy.ExtraMirroredJrpcMethods) > 0 {
-		p.extraMirroredJrpcMethods = make(map[string]struct{}, len(cfg.Proxy.ExtraMirroredJrpcMethods))
-		for _, method := range cfg.Proxy.ExtraMirroredJrpcMethods {
+	if len(cfg.proxy.ExtraMirroredJrpcMethods) > 0 {
+		p.extraMirroredJrpcMethods = make(map[string]struct{}, len(cfg.proxy.ExtraMirroredJrpcMethods))
+		for _, method := range cfg.proxy.ExtraMirroredJrpcMethods {
 			method = strings.TrimSpace(method)
 			if _, known := p.extraMirroredJrpcMethods[method]; !known {
 				p.extraMirroredJrpcMethods[method] = struct{}{}
@@ -214,16 +214,16 @@ func (p *Proxy) Run(ctx context.Context, failure chan<- error) {
 
 	go func() { // run the proxy
 		l.Info("Proxy is going up...",
-			zap.String("listen_address", p.cfg.Proxy.ListenAddress),
-			zap.String("backend", p.cfg.Proxy.BackendURL),
-			zap.Strings("peers", p.cfg.Proxy.PeerURLs),
+			zap.String("listen_address", p.cfg.proxy.ListenAddress),
+			zap.String("backend", p.cfg.proxy.BackendURL),
+			zap.Strings("peers", p.cfg.proxy.PeerURLs),
 		)
-		if p.cfg.Proxy.TLSCertificate != "" && p.cfg.Proxy.TLSKey != "" {
-			if err := p.frontend.ListenAndServeTLS(p.cfg.Proxy.ListenAddress, "", ""); err != nil {
+		if p.cfg.proxy.TLSCertificate != "" && p.cfg.proxy.TLSKey != "" {
+			if err := p.frontend.ListenAndServeTLS(p.cfg.proxy.ListenAddress, "", ""); err != nil {
 				failure <- err
 			}
 		} else {
-			if err := p.frontend.ListenAndServe(p.cfg.Proxy.ListenAddress); err != nil {
+			if err := p.frontend.ListenAndServe(p.cfg.proxy.ListenAddress); err != nil {
 				failure <- err
 			}
 		}
@@ -267,7 +267,7 @@ func (p *Proxy) Run(ctx context.Context, failure chan<- error) {
 		}()
 	}
 
-	if p.cfg.Proxy.HealthcheckURL != "" {
+	if p.cfg.proxy.HealthcheckURL != "" {
 		go func() {
 			for {
 				p.backendHealthcheck(ctx, <-p.healthcheckTicker.C)
@@ -285,7 +285,7 @@ func (p *Proxy) Stop(ctx context.Context) error {
 		p.stop()
 	}
 
-	if p.cfg.Proxy.HealthcheckURL != "" {
+	if p.cfg.proxy.HealthcheckURL != "" {
 		p.healthcheckTicker.Stop()
 		fasthttp.ReleaseURI(p.healthcheckURI)
 	}
@@ -325,18 +325,18 @@ func (p *Proxy) Observe(ctx context.Context, o otelapi.Observer) error {
 	}
 
 	o.ObserveInt64(metrics.FrontendConnectionsCount, int64(p.frontend.GetOpenConnectionsCount()), otelapi.WithAttributes(
-		attribute.KeyValue{Key: "proxy", Value: attribute.StringValue(p.cfg.Name)},
+		attribute.KeyValue{Key: "proxy", Value: attribute.StringValue(p.cfg.name)},
 	))
 
 	if p.frontend.TLSConfig != nil {
 		for _, cert := range p.frontend.TLSConfig.Certificates {
 			if cert.Leaf != nil {
 				o.ObserveInt64(metrics.TLSValidNotAfter, cert.Leaf.NotAfter.Unix(), otelapi.WithAttributes(
-					attribute.KeyValue{Key: "proxy", Value: attribute.StringValue(p.cfg.Name)},
+					attribute.KeyValue{Key: "proxy", Value: attribute.StringValue(p.cfg.name)},
 				))
 
 				o.ObserveInt64(metrics.TLSValidNotBefore, cert.Leaf.NotBefore.Unix(), otelapi.WithAttributes(
-					attribute.KeyValue{Key: "proxy", Value: attribute.StringValue(p.cfg.Name)},
+					attribute.KeyValue{Key: "proxy", Value: attribute.StringValue(p.cfg.name)},
 				))
 			}
 		}
@@ -357,7 +357,7 @@ func (p *Proxy) newJobProxy(ctx *fasthttp.RequestCtx) *jobProxy {
 		job.req = fasthttp.AcquireRequest()
 
 		ctx.Request.CopyTo(job.req)
-		job.req.SetTimeout(p.cfg.Proxy.BackendTimeout)
+		job.req.SetTimeout(p.cfg.proxy.BackendTimeout)
 		job.req.SetURI(p.backendURI)
 		job.req.Header.Add("x-forwarded-for", ctx.RemoteIP().String())
 		job.req.Header.Add("x-forwarded-host", utils.Str(ctx.Host()))
@@ -372,10 +372,10 @@ func (p *Proxy) newJobProxy(ctx *fasthttp.RequestCtx) *jobProxy {
 			job.triage.Mirror = job.triage.Mirror || mirror
 		}
 
-		if p.cfg.Chaos.Enabled {
-			injectHttpError := rand.Float64() < p.cfg.Chaos.InjectedHttpErrorProbability/100
-			injectJrpcError := rand.Float64() < p.cfg.Chaos.InjectedJrpcErrorProbability/100
-			injectBadJrpcResponse := rand.Float64() < p.cfg.Chaos.InjectedInvalidJrpcResponseProbability/100
+		if p.cfg.chaos.Enabled {
+			injectHttpError := rand.Float64() < p.cfg.chaos.InjectedHttpErrorProbability/100
+			injectJrpcError := rand.Float64() < p.cfg.chaos.InjectedJrpcErrorProbability/100
+			injectBadJrpcResponse := rand.Float64() < p.cfg.chaos.InjectedInvalidJrpcResponseProbability/100
 
 			if injectHttpError || injectJrpcError || injectBadJrpcResponse {
 				job.triage.Proxy = false
@@ -540,9 +540,9 @@ func (p *Proxy) execJobProxy(job *jobProxy) {
 		)
 	}
 
-	if p.cfg.Chaos.Enabled { // chaos-inject latency
-		latency := time.Duration(rand.Int64N(int64(p.cfg.Chaos.MaxInjectedLatency) + 1))
-		latency = max(latency, p.cfg.Chaos.MinInjectedLatency)
+	if p.cfg.chaos.Enabled { // chaos-inject latency
+		latency := time.Duration(rand.Int64N(int64(p.cfg.chaos.MaxInjectedLatency) + 1))
+		latency = max(latency, p.cfg.chaos.MinInjectedLatency)
 		time.Sleep(latency - time.Since(job.tsReqReceived))
 		loggedFields = append(loggedFields,
 			zap.Bool("latency_chaos", true),
@@ -550,7 +550,7 @@ func (p *Proxy) execJobProxy(job *jobProxy) {
 	}
 
 	{ // add log fields
-		if p.cfg.Proxy.LogRequests {
+		if p.cfg.proxy.LogRequests {
 			var jsonRequest interface{}
 			if err := json.Unmarshal(job.req.Body(), &jsonRequest); err == nil {
 				loggedFields = append(loggedFields,
@@ -564,7 +564,7 @@ func (p *Proxy) execJobProxy(job *jobProxy) {
 			}
 		}
 
-		if p.cfg.Proxy.LogResponses {
+		if p.cfg.proxy.LogResponses {
 			var body []byte
 
 			switch utils.Str(job.res.Header.ContentEncoding()) {
@@ -603,7 +603,7 @@ func (p *Proxy) execJobProxy(job *jobProxy) {
 
 	{ // emit logs and metrics
 		metricAttributes := otelapi.WithAttributes(
-			attribute.KeyValue{Key: "proxy", Value: attribute.StringValue(p.cfg.Name)},
+			attribute.KeyValue{Key: "proxy", Value: attribute.StringValue(p.cfg.name)},
 			attribute.KeyValue{Key: "jrpc_method", Value: attribute.StringValue(job.jrpcMethodForMetrics)},
 		)
 
@@ -638,7 +638,7 @@ func (p *Proxy) execJobMirror(job *jobMirror) {
 				zap.Int("http_status", job.res.StatusCode()),
 			)
 
-			if p.cfg.Proxy.LogResponses {
+			if p.cfg.proxy.LogResponses {
 				switch utils.Str(job.res.Header.ContentEncoding()) {
 				default:
 					var jsonResponse interface{}
@@ -682,7 +682,7 @@ func (p *Proxy) execJobMirror(job *jobMirror) {
 			zap.String("mirror_host", job.host),
 		)
 
-		if p.cfg.Proxy.LogRequests {
+		if p.cfg.proxy.LogRequests {
 			var jsonRequest interface{}
 			if err := json.Unmarshal(job.req.Body(), &jsonRequest); err == nil {
 				loggedFields = append(loggedFields,
@@ -698,7 +698,7 @@ func (p *Proxy) execJobMirror(job *jobMirror) {
 
 	{ // emit logs and metrics
 		metricAttributes := otelapi.WithAttributes(
-			attribute.KeyValue{Key: "proxy", Value: attribute.StringValue(p.cfg.Name)},
+			attribute.KeyValue{Key: "proxy", Value: attribute.StringValue(p.cfg.name)},
 			attribute.KeyValue{Key: "mirror_host", Value: attribute.StringValue(job.host)},
 			attribute.KeyValue{Key: "jrpc_method", Value: attribute.StringValue(job.jrpcMethodForMetrics)},
 		)
@@ -804,7 +804,7 @@ func (p *Proxy) backendHealthcheck(ctx context.Context, _ time.Time) {
 
 	req.SetURI(p.healthcheckURI)
 	req.Header.SetMethod("GET")
-	req.SetTimeout(p.cfg.Proxy.HealthcheckInterval / 2)
+	req.SetTimeout(p.cfg.proxy.HealthcheckInterval / 2)
 
 	if err := p.backend.Do(req, res); err == nil {
 		switch res.StatusCode() {
@@ -816,7 +816,7 @@ func (p *Proxy) backendHealthcheck(ctx context.Context, _ time.Time) {
 	} else {
 		l.Warn("Failed to query the healthcheck endpoint",
 			zap.Error(err),
-			zap.String("proxy", p.cfg.Name),
+			zap.String("proxy", p.cfg.name),
 		)
 		p.healthcheckStatuses.Push(false)
 	}
@@ -826,14 +826,14 @@ func (p *Proxy) backendHealthcheck(ctx context.Context, _ time.Time) {
 	}
 
 	isHealthy := true
-	for idx := p.healthcheckDepth - 1; idx >= p.healthcheckDepth-p.cfg.Proxy.HealthcheckThresholdHealthy; idx-- {
+	for idx := p.healthcheckDepth - 1; idx >= p.healthcheckDepth-p.cfg.proxy.HealthcheckThresholdHealthy; idx-- {
 		if s, ok := p.healthcheckStatuses.At(idx); ok {
 			isHealthy = isHealthy && s
 		}
 	}
 
 	isUnhealthy := true
-	for idx := p.healthcheckDepth - 1; idx >= p.healthcheckDepth-p.cfg.Proxy.HealthcheckThresholdUnhealthy; idx-- {
+	for idx := p.healthcheckDepth - 1; idx >= p.healthcheckDepth-p.cfg.proxy.HealthcheckThresholdUnhealthy; idx-- {
 		if s, ok := p.healthcheckStatuses.At(idx); ok {
 			isUnhealthy = isUnhealthy && !s
 		}
@@ -842,18 +842,18 @@ func (p *Proxy) backendHealthcheck(ctx context.Context, _ time.Time) {
 	if p.isHealthy && isUnhealthy {
 		p.isHealthy = false
 		l.Info("Backend became unhealthy",
-			zap.String("proxy", p.cfg.Name),
+			zap.String("proxy", p.cfg.name),
 		)
 	} else if !p.isHealthy && isHealthy {
 		p.isHealthy = true
 		l.Info("Backend is healthy again",
-			zap.String("proxy", p.cfg.Name),
+			zap.String("proxy", p.cfg.name),
 		)
 	}
 
 	if !p.isHealthy && p.connectionsCount() > 0 {
 		l.Warn("Resetting frontend connections b/c backend is (still) unhealthy...",
-			zap.String("proxy", p.cfg.Name),
+			zap.String("proxy", p.cfg.name),
 		)
 		p.ResetConnections()
 	}

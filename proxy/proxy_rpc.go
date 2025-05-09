@@ -7,6 +7,7 @@ import (
 	"strconv"
 
 	"github.com/ethereum/go-ethereum/common/hexutil"
+	"github.com/flashbots/bproxy/config"
 	"github.com/flashbots/bproxy/jrpc"
 	"github.com/flashbots/bproxy/triaged"
 	"github.com/valyala/fasthttp"
@@ -20,20 +21,27 @@ import (
 )
 
 type RpcProxy struct {
-	Proxy *Proxy
+	proxy *Proxy
 }
 
-func NewRpcProxy(cfg *Config) (*RpcProxy, error) {
-	p, err := newProxy(cfg)
+func NewRpcProxy(
+	cfg *config.RpcProxy,
+	chaos *config.Chaos,
+) (*RpcProxy, error) {
+	p, err := newProxy(&proxyConfig{
+		name:  "bproxy-rpc",
+		proxy: cfg.Proxy,
+		chaos: chaos,
+	})
 	if err != nil {
 		return nil, err
 	}
 
 	rpcProxy := &RpcProxy{
-		Proxy: p,
+		proxy: p,
 	}
 
-	rpcProxy.Proxy.triage = rpcProxy.triage
+	rpcProxy.proxy.triage = rpcProxy.triage
 
 	return rpcProxy, nil
 }
@@ -42,32 +50,32 @@ func (p *RpcProxy) Run(ctx context.Context, failure chan<- error) {
 	if p == nil {
 		return
 	}
-	p.Proxy.Run(ctx, failure)
+	p.proxy.Run(ctx, failure)
 }
 
 func (p *RpcProxy) ResetConnections() {
 	if p == nil {
 		return
 	}
-	p.Proxy.ResetConnections()
+	p.proxy.ResetConnections()
 }
 
 func (p *RpcProxy) Stop(ctx context.Context) error {
 	if p == nil {
 		return nil
 	}
-	return p.Proxy.Stop(ctx)
+	return p.proxy.Stop(ctx)
 }
 
 func (p *RpcProxy) Observe(ctx context.Context, o otelapi.Observer) error {
 	if p == nil {
 		return nil
 	}
-	return p.Proxy.Observe(ctx, o)
+	return p.proxy.Observe(ctx, o)
 }
 
 func (p *RpcProxy) triage(ctx *fasthttp.RequestCtx) (*triaged.Request, *fasthttp.Response) {
-	l := p.Proxy.logger.With(
+	l := p.proxy.logger.With(
 		zap.Uint64("connection_id", ctx.ConnID()),
 		zap.Uint64("request_id", ctx.ConnRequestNum()),
 	)
