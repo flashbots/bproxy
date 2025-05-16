@@ -3,6 +3,7 @@ package metrics
 import (
 	"context"
 
+	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/exporters/prometheus"
 	otelapi "go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/sdk/metric"
@@ -25,6 +26,7 @@ func Setup(
 		setupMeter, // must come first
 		setupRequestSize,
 		setupResponseSize,
+		setupLatencyAuthrpcJwt,
 		setupLatencyBackend,
 		setupLatencyTotal,
 		setupProxySuccessCount,
@@ -42,12 +44,15 @@ func Setup(
 		}
 	}
 
-	_, err := meter.RegisterCallback(observe,
+	if _, err := meter.RegisterCallback(observe,
 		FrontendConnectionsCount,
 		TLSValidNotAfter,
 		TLSValidNotBefore,
-	)
-	if err != nil {
+	); err != nil {
+		return err
+	}
+
+	if _, err := LatencyAuthrpcJwt.registerCallback(meter); err != nil {
 		return err
 	}
 
@@ -101,6 +106,17 @@ func setupResponseSize(ctx context.Context) error {
 		return err
 	}
 	ResponseSize = m
+	return nil
+}
+
+func setupLatencyAuthrpcJwt(ctx context.Context) error {
+	m, err := NewInt64Candlestick("latency_authrpc_jwt", "time since authrpc jwt token issued", "ms",
+		attribute.KeyValue{Key: "proxy", Value: attribute.StringValue("bproxy-authrpc")},
+	)
+	if err != nil {
+		return err
+	}
+	LatencyAuthrpcJwt = m
 	return nil
 }
 

@@ -3,6 +3,7 @@ package proxy
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strconv"
 
@@ -80,50 +81,18 @@ func (p *RpcProxy) triage(ctx *fasthttp.RequestCtx) (*triaged.Request, *fasthttp
 		zap.Uint64("request_id", ctx.ConnRequestNum()),
 	)
 
-	errs := make([]error, 0)
-
-	{ // jrpc id as `uint64`
-		singleShot := &jrpc.CallWithIdAsUint64{}
-		err := json.Unmarshal(ctx.Request.Body(), singleShot)
-		if err == nil {
-			return p.triageSingle(singleShot, l)
-		}
-		errs = append(errs, err)
-
-		batch := []jrpc.CallWithIdAsUint64{}
-		err = json.Unmarshal(ctx.Request.Body(), &batch)
-		if err == nil {
-			_batch := make([]jrpc.Call, 0, len(batch))
-			for _, call := range batch {
-				_batch = append(_batch, call)
-			}
-			return p.triageBatch(_batch, l)
-		}
-		errs = append(errs, err)
+	singleShot, err_singleShot := jrpc.Unmarshal(ctx.Request.Body())
+	if err_singleShot == nil {
+		return p.triageSingle(singleShot, l)
 	}
 
-	{ // jrpc id as `string`
-		singleShot := &jrpc.CallWithIdAsString{}
-		err := json.Unmarshal(ctx.Request.Body(), singleShot)
-		if err == nil {
-			return p.triageSingle(singleShot, l)
-		}
-		errs = append(errs, err)
-
-		batch := []jrpc.CallWithIdAsString{}
-		err = json.Unmarshal(ctx.Request.Body(), &batch)
-		if err == nil {
-			_batch := make([]jrpc.Call, 0, len(batch))
-			for _, call := range batch {
-				_batch = append(_batch, call)
-			}
-			return p.triageBatch(_batch, l)
-		}
-		errs = append(errs, err)
+	batch, err_batch := jrpc.UnmarshalBatch(ctx.Request.Body())
+	if err_batch == nil {
+		return p.triageBatch(batch, l)
 	}
 
 	l.Warn("Failed to parse rpc call body",
-		zap.Errors("errors", errs),
+		zap.Error(errors.Join(err_singleShot, err_batch)),
 	)
 
 	// proxy un-parse-able requests as-is, but don't mirror them

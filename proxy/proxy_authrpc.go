@@ -10,8 +10,10 @@ import (
 
 	"github.com/flashbots/bproxy/config"
 	"github.com/flashbots/bproxy/jrpc"
+	"github.com/flashbots/bproxy/jwt"
 	"github.com/flashbots/bproxy/metrics"
 	"github.com/flashbots/bproxy/triaged"
+	"github.com/flashbots/bproxy/utils"
 
 	"github.com/valyala/fasthttp"
 	"go.opentelemetry.io/otel/attribute"
@@ -114,6 +116,15 @@ func (p *AuthrpcProxy) triage(ctx *fasthttp.RequestCtx) (
 		zap.Uint64("request_id", ctx.ConnRequestNum()),
 	)
 
+	token := strings.TrimPrefix(utils.Str(ctx.Request.Header.Peek("authorization")), "Bearer ")
+	if iat, err := jwt.IssuedAt(token); err == nil {
+		metrics.LatencyAuthrpcJwt.Record(context.TODO(), int64(time.Since(iat).Milliseconds()))
+	} else {
+		l.Warn("Failed to parse iat claim from jwt",
+			zap.Error(err),
+		)
+	}
+
 	call, err := jrpc.Unmarshal(ctx.Request.Body())
 	if err != nil { // proxy & don't mirror un-parse-able requests as-is
 		l.Warn("Failed to parse authrpc call body",
@@ -168,13 +179,14 @@ func (p *AuthrpcProxy) triage(ctx *fasthttp.RequestCtx) (
 
 		switch fcuv3.ParamsCount() {
 		case 2:
-			p1 := jrpc.ForkchoiceUpdatedV3Param1{}
-			if err := json.Unmarshal(fcuv3.Params[1], &p1); err == nil {
-				if blockTimestamp, err := p1.GetTimestamp(); err == nil {
+			call.SetMethod(call.GetMethod() + "withPayload")
+			pa := jrpc.ForkchoiceUpdatedV3_PayloadAttributes{}
+			if err := json.Unmarshal(fcuv3.Params[1], &pa); err == nil {
+				if blockTimestamp, err := pa.GetTimestamp(); err == nil {
 					headsup := time.Until(blockTimestamp)
 					if headsup < 200*time.Millisecond {
-						l.Warn("Received FCU w/ extra param with less than 200ms to build the block",
-							zap.String("timestamp", p1.Timestamp),
+						l.Warn("Received FCUwPayload with less than 200ms left to build the block",
+							zap.String("timestamp", pa.Timestamp),
 							zap.Duration("headsup", headsup),
 						)
 						metrics.LateFCUCount.Add(context.TODO(), 1, otelapi.WithAttributes(
@@ -188,7 +200,7 @@ func (p *AuthrpcProxy) triage(ctx *fasthttp.RequestCtx) (
 						Deadline:   blockTimestamp,
 					}, fasthttp.AcquireResponse()
 				} else {
-					l.Warn("Failed to parse block timestamp from FCU w/ extra param",
+					l.Warn("Failed to parse block timestamp from FCUwPayload",
 						zap.Error(err),
 					)
 				}
@@ -205,16 +217,16 @@ func (p *AuthrpcProxy) triage(ctx *fasthttp.RequestCtx) (
 
 		case 1:
 			if p.cfg.deduplicateFCUs {
-				p0 := jrpc.ForkchoiceUpdatedV3Param0{}
-				if err := json.Unmarshal(fcuv3.Params[0], &p0); err == nil {
-					h, s, f := p0.GetHashes()
+				fs := jrpc.ForkchoiceUpdatedV3_ForkchoiceState{}
+				if err := json.Unmarshal(fcuv3.Params[0], &fs); err == nil {
+					h, s, f := fs.GetHashes()
 					if p.alreadySeen(h, s, f) {
 						//
-						// don't mirror or proxy FCUv3 w/o extra attrs which we already seen
+						// don't mirror or proxy FCUv3 w/o payload that we already seen
 						//
 						// see also: https://github.com/paradigmxyz/reth/issues/15086
 						//
-						l.Warn("Ignoring FCUv3 w/o extra attributes b/c we already seen these hashes",
+						l.Warn("Ignoring FCUv3 w/o payload b/c we already seen these hashes",
 							zap.String("head", h),
 							zap.String("safe", s),
 							zap.String("finalised", f),
@@ -222,7 +234,7 @@ func (p *AuthrpcProxy) triage(ctx *fasthttp.RequestCtx) (
 						return &triaged.Request{}, p.interceptEngineForkchoiceUpdatedV3(call, h)
 					}
 				} else {
-					l.Warn("Failed to parse parameter 0 of FCUv3",
+					l.Warn("Failed to parse forkchoice state from FCUv3",
 						zap.Error(err),
 					)
 				}

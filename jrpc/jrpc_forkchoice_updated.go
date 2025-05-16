@@ -24,21 +24,21 @@ func (fcuv3 ForkchoiceUpdatedV3) ParamsCount() int {
 	return res
 }
 
-type ForkchoiceUpdatedV3Param0 struct {
+type ForkchoiceUpdatedV3_ForkchoiceState struct {
 	HeadBlockHash      string `json:"headBlockHash"`
 	SafeBlockHash      string `json:"safeBlockHash"`
 	FinalizedBlockHash string `json:"finalizedBlockHash"`
 }
 
-func (p ForkchoiceUpdatedV3Param0) GetHashes() (head, safe, finalized string) {
+func (p ForkchoiceUpdatedV3_ForkchoiceState) GetHashes() (head, safe, finalized string) {
 	return p.HeadBlockHash, p.SafeBlockHash, p.FinalizedBlockHash
 }
 
-type ForkchoiceUpdatedV3Param1 struct {
+type ForkchoiceUpdatedV3_PayloadAttributes struct {
 	Timestamp string `json:"timestamp"`
 }
 
-func (p ForkchoiceUpdatedV3Param1) GetTimestamp() (time.Time, error) {
+func (p ForkchoiceUpdatedV3_PayloadAttributes) GetTimestamp() (time.Time, error) {
 	epoch, err := strconv.ParseInt(
 		strings.TrimPrefix(p.Timestamp, "0x"),
 		16, 64,

@@ -3,18 +3,19 @@ package jrpc
 import (
 	"encoding/json"
 	"fmt"
+	"strconv"
 
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	ethtypes "github.com/ethereum/go-ethereum/core/types"
 )
 
-type CallWithIdAsString struct {
-	ID     string          `json:"id"`
+type callUint64 struct {
+	ID     uint64          `json:"id"`
 	Method string          `json:"method"`
 	Params json.RawMessage `json:"params,omitempty"`
 }
 
-func (call CallWithIdAsString) DecodeEthSendRawTransaction() (ethcommon.Address, *ethtypes.Transaction, error) {
+func (call callUint64) DecodeEthSendRawTransaction() (ethcommon.Address, *ethtypes.Transaction, error) {
 	if call.Method != "eth_sendRawTransaction" {
 		return ethcommon.Address{}, nil, fmt.Errorf("%w: invalid method: %s",
 			errFailedToDecodeEthSendRawTransaction, call.Method,
@@ -24,14 +25,18 @@ func (call CallWithIdAsString) DecodeEthSendRawTransaction() (ethcommon.Address,
 	return decodeEthSendRawTransaction(call.Params)
 }
 
-func (call CallWithIdAsString) GetID() string {
-	return `"` + call.ID + `"`
+func (call callUint64) GetID() string {
+	return strconv.FormatUint(call.ID, 10)
 }
 
-func (call CallWithIdAsString) GetMethod() string {
+func (call callUint64) GetMethod() string {
 	return call.Method
 }
 
-func (call CallWithIdAsString) GetParams() json.RawMessage {
+func (call callUint64) GetParams() json.RawMessage {
 	return call.Params
+}
+
+func (call callUint64) SetMethod(method string) {
+	call.Method = method
 }
