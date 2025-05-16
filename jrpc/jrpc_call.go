@@ -13,7 +13,6 @@ type Call interface {
 	GetID() string
 	GetMethod() string
 	GetParams() json.RawMessage
-	SetMethod(string)
 }
 
 func Unmarshal(body []byte) (Call, error) {

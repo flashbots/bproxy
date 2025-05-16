@@ -35,7 +35,3 @@ func (call callString) GetMethod() string {
 func (call callString) GetParams() json.RawMessage {
 	return call.Params
 }
-
-func (call callString) SetMethod(method string) {
-	call.Method = method
-}

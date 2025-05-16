@@ -135,21 +135,20 @@ func (p *AuthrpcProxy) triage(ctx *fasthttp.RequestCtx) (
 		}, fasthttp.AcquireResponse()
 	}
 
-	defer func() {
-		triage.JrpcID = call.GetID()
-		triage.JrpcMethod = call.GetMethod()
-	}()
-
 	switch {
 	default: // only proxy by default
 		return &triaged.Request{
-			Proxy: true,
+			Proxy:      true,
+			JrpcID:     call.GetID(),
+			JrpcMethod: call.GetMethod(),
 		}, fasthttp.AcquireResponse()
 
 	case strings.HasPrefix(call.GetMethod(), "engine_getPayload"): // proxy with priority
 		return &triaged.Request{
 			Proxy:      true,
 			Prioritise: true,
+			JrpcID:     call.GetID(),
+			JrpcMethod: call.GetMethod(),
 		}, fasthttp.AcquireResponse()
 
 	case strings.HasPrefix(call.GetMethod(), "engine_newPayload"): // proxy & mirror with priority
@@ -157,12 +156,16 @@ func (p *AuthrpcProxy) triage(ctx *fasthttp.RequestCtx) (
 			Proxy:      true,
 			Prioritise: true,
 			Mirror:     true,
+			JrpcID:     call.GetID(),
+			JrpcMethod: call.GetMethod(),
 		}, fasthttp.AcquireResponse()
 
 	case strings.HasPrefix(call.GetMethod(), "miner_setMaxDASize"): // proxy & mirror
 		return &triaged.Request{
-			Proxy:  true,
-			Mirror: true,
+			Proxy:      true,
+			Mirror:     true,
+			JrpcID:     call.GetID(),
+			JrpcMethod: call.GetMethod(),
 		}, fasthttp.AcquireResponse()
 
 	case strings.HasPrefix(call.GetMethod(), "engine_forkchoiceUpdated"):
@@ -172,14 +175,15 @@ func (p *AuthrpcProxy) triage(ctx *fasthttp.RequestCtx) (
 				zap.Error(err),
 			)
 			return &triaged.Request{
-				Proxy:  true,
-				Mirror: true,
+				Proxy:      true,
+				Mirror:     true,
+				JrpcID:     call.GetID(),
+				JrpcMethod: call.GetMethod(),
 			}, fasthttp.AcquireResponse()
 		}
 
 		switch fcuv3.ParamsCount() {
 		case 2:
-			call.SetMethod(call.GetMethod() + "withPayload")
 			pa := jrpc.ForkchoiceUpdatedV3_PayloadAttributes{}
 			if err := json.Unmarshal(fcuv3.Params[1], &pa); err == nil {
 				if blockTimestamp, err := pa.GetTimestamp(); err == nil {
@@ -198,6 +202,8 @@ func (p *AuthrpcProxy) triage(ctx *fasthttp.RequestCtx) (
 						Prioritise: true,
 						Mirror:     true,
 						Deadline:   blockTimestamp,
+						JrpcID:     call.GetID(),
+						JrpcMethod: call.GetMethod() + "withPayload",
 					}, fasthttp.AcquireResponse()
 				} else {
 					l.Warn("Failed to parse block timestamp from FCUwPayload",
@@ -213,6 +219,8 @@ func (p *AuthrpcProxy) triage(ctx *fasthttp.RequestCtx) (
 				Proxy:      true,
 				Prioritise: true,
 				Mirror:     true,
+				JrpcID:     call.GetID(),
+				JrpcMethod: call.GetMethod() + "withPayload",
 			}, fasthttp.AcquireResponse()
 
 		case 1:
@@ -241,14 +249,18 @@ func (p *AuthrpcProxy) triage(ctx *fasthttp.RequestCtx) (
 			}
 
 			return &triaged.Request{
-				Proxy:  true,
-				Mirror: true,
+				Proxy:      true,
+				Mirror:     true,
+				JrpcID:     call.GetID(),
+				JrpcMethod: call.GetMethod(),
 			}, fasthttp.AcquireResponse()
 
 		default:
 			return &triaged.Request{
-				Proxy:  true,
-				Mirror: true,
+				Proxy:      true,
+				Mirror:     true,
+				JrpcID:     call.GetID(),
+				JrpcMethod: call.GetMethod(),
 			}, fasthttp.AcquireResponse()
 		}
 	}

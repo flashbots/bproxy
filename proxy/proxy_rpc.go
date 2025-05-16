@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
+	"strings"
 
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/flashbots/bproxy/config"
@@ -110,7 +111,7 @@ func (p *RpcProxy) triageSingle(call jrpc.Call, l *zap.Logger) (*triaged.Request
 	}
 
 	// proxy all non sendRawTX calls, but don't mirror them
-	if call.GetMethod() != "eth_sendRawTransaction" {
+	if !strings.HasPrefix(call.GetMethod(), "eth_sendRawTransaction") {
 		return &triaged.Request{
 			Proxy:      true,
 			JrpcMethod: call.GetMethod(),
