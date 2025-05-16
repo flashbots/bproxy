@@ -203,7 +203,7 @@ func (p *AuthrpcProxy) triage(ctx *fasthttp.RequestCtx) (
 						Mirror:     true,
 						Deadline:   blockTimestamp,
 						JrpcID:     call.GetID(),
-						JrpcMethod: call.GetMethod() + "withPayload",
+						JrpcMethod: call.GetMethod() + "_withPayload",
 					}, fasthttp.AcquireResponse()
 				} else {
 					l.Warn("Failed to parse block timestamp from FCUwPayload",
@@ -220,7 +220,7 @@ func (p *AuthrpcProxy) triage(ctx *fasthttp.RequestCtx) (
 				Prioritise: true,
 				Mirror:     true,
 				JrpcID:     call.GetID(),
-				JrpcMethod: call.GetMethod() + "withPayload",
+				JrpcMethod: call.GetMethod() + "_withPayload",
 			}, fasthttp.AcquireResponse()
 
 		case 1:

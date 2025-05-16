@@ -20,8 +20,6 @@ type jobProxy struct {
 	triage *triaged.Request
 
 	proxy func(req *fasthttp.Request, res *fasthttp.Response) error
-
-	jrpcMethodForMetrics string
 }
 
 type jobMirror struct {

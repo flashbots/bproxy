@@ -464,11 +464,6 @@ func (p *Proxy) newJobProxy(ctx *fasthttp.RequestCtx) *jobProxy {
 		job.log = p.logger.With(loggedFields...)
 	}
 
-	job.jrpcMethodForMetrics = job.triage.JrpcMethod
-	if job.triage.Mirror {
-		job.jrpcMethodForMetrics += "+"
-	}
-
 	return job
 }
 
@@ -487,7 +482,7 @@ func (p *Proxy) newJobMirror(ctx *fasthttp.RequestCtx, pjob *jobProxy, uri *fast
 		host:                 utils.Str(uri.Host()),
 		req:                  req,
 		res:                  res,
-		jrpcMethodForMetrics: pjob.jrpcMethodForMetrics,
+		jrpcMethodForMetrics: pjob.triage.JrpcMethod,
 	}
 }
 
@@ -629,7 +624,7 @@ func (p *Proxy) execJobProxy(job *jobProxy) {
 	{ // emit logs and metrics
 		metricAttributes := otelapi.WithAttributes(
 			attribute.KeyValue{Key: "proxy", Value: attribute.StringValue(p.cfg.name)},
-			attribute.KeyValue{Key: "jrpc_method", Value: attribute.StringValue(job.jrpcMethodForMetrics)},
+			attribute.KeyValue{Key: "jrpc_method", Value: attribute.StringValue(job.triage.JrpcMethod)},
 		)
 
 		metrics.RequestSize.Record(context.TODO(), int64(job.req.Header.ContentLength()), metricAttributes)
