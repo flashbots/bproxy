@@ -98,7 +98,8 @@ func (p *RpcProxy) triage(ctx *fasthttp.RequestCtx) (*triaged.Request, *fasthttp
 
 	// proxy un-parse-able requests as-is, but don't mirror them
 	return &triaged.Request{
-		Proxy: true,
+		Proxy:      true,
+		JrpcMethod: "unknown",
 	}, fasthttp.AcquireResponse()
 }
 

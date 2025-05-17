@@ -9,13 +9,15 @@ import (
 )
 
 type Int64Candlestick struct {
-	metric otelapi.Int64ObservableGauge
+	gauge otelapi.Int64ObservableGauge
 
 	attrOpen, attrClose []attribute.KeyValue
 	attrHigh, attrLow   []attribute.KeyValue
+	attrVolume          []attribute.KeyValue
 
-	open, close, count int64
-	high, low          int64
+	open, close int64
+	high, low   int64
+	volume      int64
 
 	mx sync.Mutex
 }
@@ -23,55 +25,54 @@ type Int64Candlestick struct {
 func NewInt64Candlestick(
 	name, description, uom string,
 	attributes ...attribute.KeyValue,
-) (*Int64Candlestick, error) {
-	var err error
-
-	c := &Int64Candlestick{
-		attrOpen:  append(attributes, attribute.KeyValue{Key: "type", Value: attribute.StringValue("open")}),
-		attrClose: append(attributes, attribute.KeyValue{Key: "type", Value: attribute.StringValue("close")}),
-		attrHigh:  append(attributes, attribute.KeyValue{Key: "type", Value: attribute.StringValue("high")}),
-		attrLow:   append(attributes, attribute.KeyValue{Key: "type", Value: attribute.StringValue("low")}),
+) (c *Int64Candlestick, err error) {
+	c = &Int64Candlestick{
+		attrOpen:   append(attributes, attribute.KeyValue{Key: "type", Value: attribute.StringValue("open")}),
+		attrClose:  append(attributes, attribute.KeyValue{Key: "type", Value: attribute.StringValue("close")}),
+		attrHigh:   append(attributes, attribute.KeyValue{Key: "type", Value: attribute.StringValue("high")}),
+		attrLow:    append(attributes, attribute.KeyValue{Key: "type", Value: attribute.StringValue("low")}),
+		attrVolume: append(attributes, attribute.KeyValue{Key: "type", Value: attribute.StringValue("volume")}),
 	}
 
 	options := []otelapi.Int64ObservableGaugeOption{
 		otelapi.WithDescription(description),
 	}
-
 	if uom != "" {
 		options = append(options, otelapi.WithUnit(uom))
 	}
 
-	if c.metric, err = meter.Int64ObservableGauge(name, options...); err != nil {
+	if c.gauge, err = meter.Int64ObservableGauge(name, options...); err != nil {
 		return nil, err
 	}
 
-	return c, nil
+	return
 }
 
 func (c *Int64Candlestick) registerCallback(m otelapi.Meter) (otelapi.Registration, error) {
-	return m.RegisterCallback(c.observe, c.metric)
+	return m.RegisterCallback(c.observe, c.gauge)
 }
 
 func (c *Int64Candlestick) observe(ctx context.Context, o otelapi.Observer) error {
 	c.mx.Lock()
 	defer c.mx.Unlock()
 
-	if c.count == 0 {
+	if c.volume == 0 {
 		return nil
 	}
 
-	c.close = c.close / c.count
+	c.close = c.close / c.volume
 
-	o.ObserveInt64(c.metric, c.open, otelapi.WithAttributes(c.attrOpen...))
-	o.ObserveInt64(c.metric, c.close, otelapi.WithAttributes(c.attrClose...))
-	o.ObserveInt64(c.metric, c.high, otelapi.WithAttributes(c.attrHigh...))
-	o.ObserveInt64(c.metric, c.low, otelapi.WithAttributes(c.attrLow...))
+	o.ObserveInt64(c.gauge, c.open, otelapi.WithAttributes(c.attrOpen...))
+	o.ObserveInt64(c.gauge, c.close, otelapi.WithAttributes(c.attrClose...))
+	o.ObserveInt64(c.gauge, c.high, otelapi.WithAttributes(c.attrHigh...))
+	o.ObserveInt64(c.gauge, c.low, otelapi.WithAttributes(c.attrLow...))
+	o.ObserveInt64(c.gauge, c.volume, otelapi.WithAttributes(c.attrVolume...))
 
 	c.open = c.close
 	c.close = 0
-	c.count = 0
 	c.high = 0
 	c.low = 0
+	c.volume = 0
 
 	return nil
 }
@@ -80,19 +81,15 @@ func (c *Int64Candlestick) Record(ctx context.Context, value int64) {
 	c.mx.Lock()
 	defer c.mx.Unlock()
 
-	if c.count == 0 {
-		c.high = value
-		c.low = value
-	}
-
-	if value > c.high {
-		c.high = value
-	}
-
-	if value < c.low {
-		c.low = value
-	}
-
 	c.close += value
-	c.count++
+
+	if c.volume == 0 || value > c.high {
+		c.high = value
+	}
+
+	if c.volume == 0 || value < c.low {
+		c.low = value
+	}
+
+	c.volume++
 }

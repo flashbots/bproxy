@@ -131,7 +131,8 @@ func (p *AuthrpcProxy) triage(ctx *fasthttp.RequestCtx) (
 			zap.Error(err),
 		)
 		return &triaged.Request{
-			Proxy: true,
+			Proxy:      true,
+			JrpcMethod: "unknown",
 		}, fasthttp.AcquireResponse()
 	}
 
