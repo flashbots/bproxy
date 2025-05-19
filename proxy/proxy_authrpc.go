@@ -240,7 +240,10 @@ func (p *AuthrpcProxy) triage(ctx *fasthttp.RequestCtx) (
 							zap.String("safe", s),
 							zap.String("finalised", f),
 						)
-						return &triaged.Request{}, p.interceptEngineForkchoiceUpdatedV3(call, h)
+						return &triaged.Request{
+							JrpcID:     call.GetID(),
+							JrpcMethod: call.GetMethod(),
+						}, p.interceptEngineForkchoiceUpdatedV3(call, h)
 					}
 				} else {
 					l.Warn("Failed to parse forkchoice state from FCUv3",
