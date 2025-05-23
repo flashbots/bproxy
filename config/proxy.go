@@ -25,7 +25,9 @@ type Proxy struct {
 	HealthcheckURL                  string        `yaml:"healthcheck_url"`
 	ListenAddress                   string        `yaml:"listen_address"`
 	LogRequests                     bool          `yaml:"log_requests"`
+	LogRequestsMaxSize              int           `yaml:"log_requests_max_size"`
 	LogResponses                    bool          `yaml:"log_responses"`
+	LogResponsesMaxSize             int           `yaml:"log_responses_max_size"`
 	MaxBackendConnectionsPerHost    int           `yaml:"max_backend_connections_per_host"`
 	MaxBackendConnectionWaitTimeout time.Duration `yaml:"max_client_connection_wait_timeout"`
 	MaxClientConnectionsPerIP       int           `yaml:"max_client_connections_per_ip"`

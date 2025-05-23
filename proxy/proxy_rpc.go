@@ -12,6 +12,7 @@ import (
 	"github.com/flashbots/bproxy/config"
 	"github.com/flashbots/bproxy/jrpc"
 	"github.com/flashbots/bproxy/triaged"
+	"github.com/flashbots/bproxy/utils"
 	"github.com/valyala/fasthttp"
 
 	tdxabi "github.com/google/go-tdx-guest/abi"
@@ -104,44 +105,54 @@ func (p *RpcProxy) triage(ctx *fasthttp.RequestCtx) (*triaged.Request, *fasthttp
 }
 
 func (p *RpcProxy) triageSingle(call jrpc.Call, l *zap.Logger) (*triaged.Request, *fasthttp.Response) {
-	if call.GetMethod() == "tee_getDcapQuote" {
+	switch {
+	case call.GetMethod() == "tee_getDcapQuote":
 		return &triaged.Request{
 			JrpcMethod: call.GetMethod(),
 			JrpcID:     call.GetID(),
 		}, p.interceptTeeGetDcapQuote(call)
-	}
 
-	// proxy all non sendRawTX calls, but don't mirror them
-	if !strings.HasPrefix(call.GetMethod(), "eth_sendRawTransaction") {
+	case strings.HasPrefix(call.GetMethod(), "eth_sendRawTransaction"):
+		res := &triaged.Request{
+			Proxy:      true,
+			Prioritise: true,
+			Mirror:     true,
+			JrpcMethod: call.GetMethod(),
+			JrpcID:     call.GetID(),
+		}
+
+		if from, tx, err := call.DecodeEthSendRawTransaction(); err == nil {
+			res.Transactions = triaged.RequestTransactions{{
+				From:  &from,
+				To:    tx.To(),
+				Hash:  tx.Hash(),
+				Nonce: tx.Nonce(),
+			}}
+		} else {
+			l.Warn("Failed to decode eth_sendRawTransaction",
+				zap.Error(err),
+			)
+		}
+
+		return res, fasthttp.AcquireResponse()
+
+	case strings.HasPrefix(call.GetMethod(), "eth_sendBundle"):
+		return &triaged.Request{
+			Proxy:      true,
+			Prioritise: true,
+			Mirror:     true,
+			JrpcMethod: call.GetMethod(),
+			JrpcID:     call.GetID(),
+		}, fasthttp.AcquireResponse()
+
+	default:
+		// proxy but don't mirror the rest
 		return &triaged.Request{
 			Proxy:      true,
 			JrpcMethod: call.GetMethod(),
 			JrpcID:     call.GetID(),
 		}, fasthttp.AcquireResponse()
 	}
-
-	res := &triaged.Request{
-		Proxy:      true,
-		Prioritise: true,
-		Mirror:     true,
-		JrpcMethod: call.GetMethod(),
-		JrpcID:     call.GetID(),
-	}
-
-	if from, tx, err := call.DecodeEthSendRawTransaction(); err == nil {
-		res.Transactions = triaged.RequestTransactions{{
-			From:  &from,
-			To:    tx.To(),
-			Hash:  tx.Hash(),
-			Nonce: tx.Nonce(),
-		}}
-	} else {
-		l.Warn("Failed to decode eth_sendRawTransaction",
-			zap.Error(err),
-		)
-	}
-
-	return res, fasthttp.AcquireResponse()
 }
 
 func (p *RpcProxy) triageBatch(batch []jrpc.Call, l *zap.Logger) (*triaged.Request, *fasthttp.Response) {
@@ -157,43 +168,55 @@ func (p *RpcProxy) triageBatch(batch []jrpc.Call, l *zap.Logger) (*triaged.Reque
 		}
 	}
 
-	// proxy all non sendRawTX calls, but don't mirror them
-	if _, hasEthSendRawTx := methodsSet["eth_sendRawTransaction"]; !hasEthSendRawTx {
+	switch {
+	case utils.MapHasKeyWithPrefix(methodsSet, "eth_sendRawTransaction"):
+		res := &triaged.Request{
+			Proxy:        true,
+			Prioritise:   true,
+			Mirror:       true,
+			JrpcMethod:   "batch(" + strconv.Itoa(len(batch)) + ")",
+			JrpcID:       batch[0].GetID(),
+			Transactions: make(triaged.RequestTransactions, 0),
+		}
+
+		for _, call := range batch {
+			if call.GetMethod() != "eth_sendRawTransaction" {
+				continue
+			}
+			if from, tx, err := call.DecodeEthSendRawTransaction(); err == nil {
+				res.Transactions = append(res.Transactions, triaged.RequestTransaction{
+					From:  &from,
+					To:    tx.To(),
+					Hash:  tx.Hash(),
+					Nonce: tx.Nonce(),
+				})
+			} else {
+				l.Warn("Failed to decode eth_sendRawTransaction",
+					zap.Error(err),
+				)
+			}
+		}
+
+		return res, fasthttp.AcquireResponse()
+
+	case utils.MapHasKeyWithPrefix(methodsSet, "eth_sendBundle"):
+		return &triaged.Request{
+			Proxy:        true,
+			Prioritise:   true,
+			Mirror:       true,
+			JrpcMethod:   "batch(" + strconv.Itoa(len(batch)) + ")",
+			JrpcID:       batch[0].GetID(),
+			Transactions: make(triaged.RequestTransactions, 0),
+		}, fasthttp.AcquireResponse()
+
+	default:
+		// proxy but don't mirror the rest
 		return &triaged.Request{
 			Proxy:      true,
 			JrpcMethod: "batch(" + strconv.Itoa(len(batch)) + ")",
 			JrpcID:     batch[0].GetID(),
 		}, fasthttp.AcquireResponse()
 	}
-
-	res := &triaged.Request{
-		Proxy:        true,
-		Prioritise:   true,
-		Mirror:       true,
-		JrpcMethod:   "batch(" + strconv.Itoa(len(batch)) + ")",
-		JrpcID:       batch[0].GetID(),
-		Transactions: make(triaged.RequestTransactions, 0),
-	}
-
-	for _, call := range batch {
-		if call.GetMethod() != "eth_sendRawTransaction" {
-			continue
-		}
-		if from, tx, err := call.DecodeEthSendRawTransaction(); err == nil {
-			res.Transactions = append(res.Transactions, triaged.RequestTransaction{
-				From:  &from,
-				To:    tx.To(),
-				Hash:  tx.Hash(),
-				Nonce: tx.Nonce(),
-			})
-		} else {
-			l.Warn("Failed to decode eth_sendRawTransaction",
-				zap.Error(err),
-			)
-		}
-	}
-
-	return res, fasthttp.AcquireResponse()
 }
 
 func (p *RpcProxy) interceptTeeGetDcapQuote(call jrpc.Call) *fasthttp.Response {

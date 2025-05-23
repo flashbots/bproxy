@@ -545,6 +545,11 @@ func (p *Proxy) execJobProxy(job *jobProxy) {
 
 	loggedFields := make([]zap.Field, 0, 12)
 
+	loggedFields = append(loggedFields,
+		zap.Int("request_size", len(job.req.Body())),
+		zap.Int("response_size", len(job.res.Body())),
+	)
+
 	if err != nil {
 		switch utils.Str(job.req.Header.ContentType()) {
 		case "application/json":
@@ -570,7 +575,7 @@ func (p *Proxy) execJobProxy(job *jobProxy) {
 	}
 
 	{ // add log fields
-		if p.cfg.proxy.LogRequests {
+		if p.cfg.proxy.LogRequests && len(job.req.Body()) <= p.cfg.proxy.LogRequestsMaxSize {
 			var jsonRequest interface{}
 			if err := json.Unmarshal(job.req.Body(), &jsonRequest); err == nil {
 				loggedFields = append(loggedFields,
@@ -584,7 +589,7 @@ func (p *Proxy) execJobProxy(job *jobProxy) {
 			}
 		}
 
-		if p.cfg.proxy.LogResponses {
+		if p.cfg.proxy.LogResponses && len(job.res.Body()) <= p.cfg.proxy.LogResponsesMaxSize {
 			var body []byte
 
 			switch utils.Str(job.res.Header.ContentEncoding()) {
@@ -653,12 +658,31 @@ func (p *Proxy) execJobMirror(job *jobMirror) {
 
 	loggedFields := make([]zap.Field, 0, 12)
 	{ // add log fields
+		loggedFields = append(loggedFields,
+			zap.String("mirror_host", job.host),
+			zap.Int("request_size", len(job.req.Body())),
+			zap.Int("response_size", len(job.res.Body())),
+		)
+
+		if p.cfg.proxy.LogRequests && len(job.req.Body()) <= p.cfg.proxy.LogRequestsMaxSize {
+			var jsonRequest interface{}
+			if err := json.Unmarshal(job.req.Body(), &jsonRequest); err == nil {
+				loggedFields = append(loggedFields,
+					zap.Any("json_request", jsonRequest),
+				)
+			} else {
+				loggedFields = append(loggedFields,
+					zap.String("http_request", utils.Str(job.req.Body())),
+				)
+			}
+		}
+
 		if err == nil {
 			loggedFields = append(loggedFields,
 				zap.Int("http_status", job.res.StatusCode()),
 			)
 
-			if p.cfg.proxy.LogResponses {
+			if p.cfg.proxy.LogResponses && len(job.res.Body()) <= p.cfg.proxy.LogResponsesMaxSize {
 				switch utils.Str(job.res.Header.ContentEncoding()) {
 				default:
 					var jsonResponse interface{}
@@ -696,23 +720,6 @@ func (p *Proxy) execJobMirror(job *jobMirror) {
 			loggedFields = append(loggedFields,
 				zap.NamedError("error_mirror", err),
 			)
-		}
-
-		loggedFields = append(loggedFields,
-			zap.String("mirror_host", job.host),
-		)
-
-		if p.cfg.proxy.LogRequests {
-			var jsonRequest interface{}
-			if err := json.Unmarshal(job.req.Body(), &jsonRequest); err == nil {
-				loggedFields = append(loggedFields,
-					zap.Any("json_request", jsonRequest),
-				)
-			} else {
-				loggedFields = append(loggedFields,
-					zap.String("http_request", utils.Str(job.req.Body())),
-				)
-			}
 		}
 	}
 

@@ -125,6 +125,15 @@ func CommandServe(cfg *config.Config) *cli.Command {
 				Value:       false,
 			},
 
+			&cli.IntFlag{
+				Category:    strings.ToUpper(category),
+				Destination: &cfg.LogRequestsMaxSize,
+				EnvVars:     []string{envPrefix + strings.ToUpper(category) + "_LOG_REQUESTS_MAX_SIZE"},
+				Name:        category + "-log-requests-max-size",
+				Usage:       "do not log " + category + " requests larger than `size`",
+				Value:       4096,
+			},
+
 			&cli.BoolFlag{ // --xxx-log-responses
 				Category:    strings.ToUpper(category),
 				Destination: &cfg.LogResponses,
@@ -132,6 +141,15 @@ func CommandServe(cfg *config.Config) *cli.Command {
 				Name:        category + "-log-responses",
 				Usage:       "whether to log responses to proxied/mirrored " + category + " requests",
 				Value:       false,
+			},
+
+			&cli.IntFlag{
+				Category:    strings.ToUpper(category),
+				Destination: &cfg.LogResponsesMaxSize,
+				EnvVars:     []string{envPrefix + strings.ToUpper(category) + "_LOG_RESPONSES_MAX_SIZE"},
+				Name:        category + "-log-responses-max-size",
+				Usage:       "do not log " + category + " responses larger than `size`",
+				Value:       4096,
 			},
 
 			&cli.DurationFlag{ // --xxx-max-backend-connection-wait-timeout
