@@ -26,7 +26,7 @@ import (
 	"go.uber.org/zap"
 )
 
-type Proxy struct {
+type HTTP struct {
 	cfg *proxyConfig
 
 	backend  *fasthttp.Client
@@ -54,23 +54,23 @@ type Proxy struct {
 	drainingConnections map[string]net.Conn
 	mxConnections       sync.Mutex
 
-	queueProxyHi chan *jobProxy
-	queueProxyLo chan *jobProxy
+	queueProxyHi chan *proxyJob
+	queueProxyLo chan *proxyJob
 
-	queueMirrorHi map[string]chan *jobMirror
-	queueMirrorLo map[string]chan *jobMirror
+	queueMirrorHi map[string]chan *mirrorJob
+	queueMirrorLo map[string]chan *mirrorJob
 }
 
-func newProxy(cfg *proxyConfig) (*Proxy, error) {
+func newProxy(cfg *proxyConfig) (*HTTP, error) {
 	l := zap.L().With(zap.String("proxy_name", cfg.name))
 
-	p := &Proxy{
+	p := &HTTP{
 		cfg:                 cfg,
 		logger:              l,
 		connections:         make(map[string]net.Conn),
 		drainingConnections: make(map[string]net.Conn),
-		queueProxyHi:        make(chan *jobProxy, 512),
-		queueProxyLo:        make(chan *jobProxy, 512),
+		queueProxyHi:        make(chan *proxyJob, 512),
+		queueProxyLo:        make(chan *proxyJob, 512),
 	}
 
 	p.triage = func(*fasthttp.RequestCtx) (*triaged.Request, *fasthttp.Response) {
@@ -135,8 +135,8 @@ func newProxy(cfg *proxyConfig) (*Proxy, error) {
 		}
 
 		p.peerURIs = make(map[string]*fasthttp.URI, len(cfg.proxy.PeerURLs))
-		p.queueMirrorHi = make(map[string]chan *jobMirror, len(cfg.proxy.PeerURLs))
-		p.queueMirrorLo = make(map[string]chan *jobMirror, len(cfg.proxy.PeerURLs))
+		p.queueMirrorHi = make(map[string]chan *mirrorJob, len(cfg.proxy.PeerURLs))
+		p.queueMirrorLo = make(map[string]chan *mirrorJob, len(cfg.proxy.PeerURLs))
 
 		for _, peerURL := range cfg.proxy.PeerURLs {
 			peerURI := fasthttp.AcquireURI()
@@ -150,8 +150,8 @@ func newProxy(cfg *proxyConfig) (*Proxy, error) {
 			host := utils.Str(peerURI.Host())
 
 			p.peerURIs[host] = peerURI
-			p.queueMirrorHi[host] = make(chan *jobMirror, 512)
-			p.queueMirrorLo[host] = make(chan *jobMirror, 512)
+			p.queueMirrorHi[host] = make(chan *mirrorJob, 512)
+			p.queueMirrorLo[host] = make(chan *mirrorJob, 512)
 		}
 	}
 
@@ -201,7 +201,7 @@ func newProxy(cfg *proxyConfig) (*Proxy, error) {
 	return p, nil
 }
 
-func (p *Proxy) Run(ctx context.Context, failure chan<- error) {
+func (p *HTTP) Run(ctx context.Context, failure chan<- error) {
 	if p == nil {
 		return
 	}
@@ -233,7 +233,7 @@ func (p *Proxy) Run(ctx context.Context, failure chan<- error) {
 	if p.cfg.proxy.UsePriorityQueue {
 		go func() { // run the proxy job loop with priority queue
 			for {
-				var job *jobProxy
+				var job *proxyJob
 				select {
 				case job = <-p.queueProxyHi:
 				default:
@@ -242,18 +242,18 @@ func (p *Proxy) Run(ctx context.Context, failure chan<- error) {
 					case job = <-p.queueProxyLo:
 					}
 				}
-				p.execJobProxy(job)
+				p.execProxyJob(job)
 			}
 		}()
 	} else {
 		go func() { // run the proxy job loop without priority queue
 			for {
-				var job *jobProxy
+				var job *proxyJob
 				select {
 				case job = <-p.queueProxyHi:
 				case job = <-p.queueProxyLo:
 				}
-				p.execJobProxy(job)
+				p.execProxyJob(job)
 			}
 		}()
 
@@ -265,7 +265,7 @@ func (p *Proxy) Run(ctx context.Context, failure chan<- error) {
 
 		if p.cfg.proxy.UsePriorityQueue { // with priority queue
 			go func() {
-				var job *jobMirror
+				var job *mirrorJob
 				for {
 					select {
 					case job = <-queueMirrorHi:
@@ -275,18 +275,18 @@ func (p *Proxy) Run(ctx context.Context, failure chan<- error) {
 						case job = <-queueMirrorLo:
 						}
 					}
-					p.execJobMirror(job)
+					p.execMirrorJob(job)
 				}
 			}()
 		} else { // without priority queue
 			go func() {
-				var job *jobMirror
+				var job *mirrorJob
 				for {
 					select {
 					case job = <-queueMirrorHi:
 					case job = <-queueMirrorLo:
 					}
-					p.execJobMirror(job)
+					p.execMirrorJob(job)
 				}
 			}()
 		}
@@ -301,7 +301,7 @@ func (p *Proxy) Run(ctx context.Context, failure chan<- error) {
 	}
 }
 
-func (p *Proxy) Stop(ctx context.Context) error {
+func (p *HTTP) Stop(ctx context.Context) error {
 	if p == nil {
 		return nil
 	}
@@ -325,7 +325,7 @@ func (p *Proxy) Stop(ctx context.Context) error {
 	return res
 }
 
-func (p *Proxy) ResetConnections() {
+func (p *HTTP) ResetConnections() {
 	if p == nil {
 		return
 	}
@@ -344,7 +344,7 @@ func (p *Proxy) ResetConnections() {
 	}
 }
 
-func (p *Proxy) Observe(ctx context.Context, o otelapi.Observer) error {
+func (p *HTTP) Observe(ctx context.Context, o otelapi.Observer) error {
 	if p == nil {
 		return nil
 	}
@@ -370,8 +370,8 @@ func (p *Proxy) Observe(ctx context.Context, o otelapi.Observer) error {
 	return nil
 }
 
-func (p *Proxy) newJobProxy(ctx *fasthttp.RequestCtx) *jobProxy {
-	job := &jobProxy{
+func (p *HTTP) newProxyJob(ctx *fasthttp.RequestCtx) *proxyJob {
+	job := &proxyJob{
 		tsReqReceived: ctx.Time(),
 		wg:            &sync.WaitGroup{},
 	}
@@ -467,7 +467,7 @@ func (p *Proxy) newJobProxy(ctx *fasthttp.RequestCtx) *jobProxy {
 	return job
 }
 
-func (p *Proxy) newJobMirror(ctx *fasthttp.RequestCtx, pjob *jobProxy, uri *fasthttp.URI) *jobMirror {
+func (p *HTTP) newMirrorJob(ctx *fasthttp.RequestCtx, pjob *proxyJob, uri *fasthttp.URI) *mirrorJob {
 	req := fasthttp.AcquireRequest()
 	res := fasthttp.AcquireResponse()
 
@@ -477,7 +477,7 @@ func (p *Proxy) newJobMirror(ctx *fasthttp.RequestCtx, pjob *jobProxy, uri *fast
 	req.Header.Add("x-forwarded-host", utils.Str(ctx.Host()))
 	req.Header.Add("x-forwarded-proto", utils.Str(ctx.Request.URI().Scheme()))
 
-	return &jobMirror{
+	return &mirrorJob{
 		log:                  pjob.log,
 		host:                 utils.Str(uri.Host()),
 		req:                  req,
@@ -486,8 +486,8 @@ func (p *Proxy) newJobMirror(ctx *fasthttp.RequestCtx, pjob *jobProxy, uri *fast
 	}
 }
 
-func (p *Proxy) receive(ctx *fasthttp.RequestCtx) {
-	pj := p.newJobProxy(ctx)
+func (p *HTTP) receive(ctx *fasthttp.RequestCtx) {
+	pj := p.newProxyJob(ctx)
 	defer fasthttp.ReleaseResponse(pj.res)
 	defer fasthttp.ReleaseRequest(pj.req)
 
@@ -502,7 +502,7 @@ func (p *Proxy) receive(ctx *fasthttp.RequestCtx) {
 
 		if pj.triage.Mirror {
 			for host, uri := range p.peerURIs {
-				mj := p.newJobMirror(ctx, pj, uri)
+				mj := p.newMirrorJob(ctx, pj, uri)
 				if pj.triage.Prioritise {
 					p.queueMirrorHi[host] <- mj
 				} else {
@@ -535,7 +535,7 @@ func (p *Proxy) receive(ctx *fasthttp.RequestCtx) {
 	_ = pj.log.Sync()
 }
 
-func (p *Proxy) execJobProxy(job *jobProxy) {
+func (p *HTTP) execProxyJob(job *proxyJob) {
 	defer job.wg.Done()
 
 	tsReqProxyStart := time.Now()
@@ -650,7 +650,7 @@ func (p *Proxy) execJobProxy(job *jobProxy) {
 	}
 }
 
-func (p *Proxy) execJobMirror(job *jobMirror) {
+func (p *HTTP) execMirrorJob(job *mirrorJob) {
 	defer fasthttp.ReleaseRequest(job.req)
 	defer fasthttp.ReleaseResponse(job.res)
 
@@ -742,14 +742,14 @@ func (p *Proxy) execJobMirror(job *jobMirror) {
 	}
 }
 
-func (p *Proxy) injectHttpError(_ *fasthttp.Request, res *fasthttp.Response) error {
+func (p *HTTP) injectHttpError(_ *fasthttp.Request, res *fasthttp.Response) error {
 	res.SetStatusCode(fasthttp.StatusInternalServerError)
 	res.SetBody([]byte("chaos-injected error"))
 
 	return nil
 }
 
-func (p *Proxy) injectJrpcError(
+func (p *HTTP) injectJrpcError(
 	call *triaged.Request, _ *fasthttp.Request, _ *fasthttp.Response,
 ) func(_ *fasthttp.Request, _ *fasthttp.Response) error {
 	return func(_ *fasthttp.Request, res *fasthttp.Response) error {
@@ -764,7 +764,7 @@ func (p *Proxy) injectJrpcError(
 	}
 }
 
-func (p *Proxy) injectInvalidJrpcResponse(_ *fasthttp.Request, res *fasthttp.Response) error {
+func (p *HTTP) injectInvalidJrpcResponse(_ *fasthttp.Request, res *fasthttp.Response) error {
 	res.SetStatusCode(fasthttp.StatusOK)
 	res.Header.Add("content-type", "application/json; charset=utf-8")
 	res.SetBody([]byte("chaos-injected invalid jrpc response"))
@@ -772,7 +772,7 @@ func (p *Proxy) injectInvalidJrpcResponse(_ *fasthttp.Request, res *fasthttp.Res
 	return nil
 }
 
-func (p *Proxy) upstreamConnectionChanged(conn net.Conn, state fasthttp.ConnState) {
+func (p *HTTP) upstreamConnectionChanged(conn net.Conn, state fasthttp.ConnState) {
 	p.mxConnections.Lock()
 	defer p.mxConnections.Unlock()
 
@@ -813,14 +813,14 @@ func (p *Proxy) upstreamConnectionChanged(conn net.Conn, state fasthttp.ConnStat
 	}
 }
 
-func (p *Proxy) connectionsCount() int {
+func (p *HTTP) connectionsCount() int {
 	p.mxConnections.Lock()
 	defer p.mxConnections.Unlock()
 
 	return len(p.connections)
 }
 
-func (p *Proxy) backendHealthcheck(ctx context.Context, _ time.Time) {
+func (p *HTTP) backendHealthcheck(ctx context.Context, _ time.Time) {
 	l := logutils.LoggerFromContext(ctx)
 
 	req := fasthttp.AcquireRequest()

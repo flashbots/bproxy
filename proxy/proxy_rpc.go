@@ -24,7 +24,7 @@ import (
 )
 
 type RpcProxy struct {
-	proxy *Proxy
+	proxy *HTTP
 }
 
 func NewRpcProxy(

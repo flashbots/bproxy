@@ -22,7 +22,7 @@ import (
 )
 
 type AuthrpcProxy struct {
-	proxy *Proxy
+	proxy *HTTP
 
 	cfg *authrpcProxyConfig
 

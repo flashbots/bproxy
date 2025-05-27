@@ -9,7 +9,7 @@ import (
 	"go.uber.org/zap"
 )
 
-type jobProxy struct {
+type proxyJob struct {
 	tsReqReceived time.Time
 
 	log *zap.Logger
@@ -22,7 +22,7 @@ type jobProxy struct {
 	proxy func(req *fasthttp.Request, res *fasthttp.Response) error
 }
 
-type jobMirror struct {
+type mirrorJob struct {
 	log *zap.Logger
 
 	host string
