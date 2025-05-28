@@ -21,6 +21,10 @@ import (
 	"go.uber.org/zap"
 )
 
+type authrpcProxyConfig struct {
+	deduplicateFCUs bool
+}
+
 type AuthrpcProxy struct {
 	proxy *HTTP
 
@@ -35,9 +39,9 @@ func NewAuthrpcProxy(
 	cfg *config.AuthrpcProxy,
 	chaos *config.Chaos,
 ) (*AuthrpcProxy, error) {
-	p, err := newProxy(&proxyConfig{
+	p, err := newHTTP(&httpConfig{
 		name:  "bproxy-authrpc",
-		proxy: cfg.Proxy,
+		proxy: cfg.HttpProxy,
 		chaos: chaos,
 	})
 	if err != nil {

@@ -14,7 +14,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/flashbots/bproxy/data"
+	"github.com/flashbots/bproxy/config"
 	"github.com/flashbots/bproxy/logutils"
 	"github.com/flashbots/bproxy/metrics"
 	"github.com/flashbots/bproxy/triaged"
@@ -26,8 +26,15 @@ import (
 	"go.uber.org/zap"
 )
 
+type httpConfig struct {
+	name string
+
+	chaos *config.Chaos
+	proxy *config.HttpProxy
+}
+
 type HTTP struct {
-	cfg *proxyConfig
+	cfg *httpConfig
 
 	backend  *fasthttp.Client
 	frontend *fasthttp.Server
@@ -37,14 +44,8 @@ type HTTP struct {
 	extraMirroredJrpcMethods map[string]struct{}
 	peerURIs                 map[string]*fasthttp.URI
 
-	healthcheck         *fasthttp.Client
-	healthcheckURI      *fasthttp.URI
-	healthcheckTicker   *time.Ticker
-	healthcheckStatuses *data.RingBuffer[bool]
-	healthcheckDepth    int
-	isHealthy           bool
-
-	logger *zap.Logger
+	healthcheck *healthcheck
+	logger      *zap.Logger
 
 	triage func(ctx *fasthttp.RequestCtx) (*triaged.Request, *fasthttp.Response)
 	run    func()
@@ -61,7 +62,7 @@ type HTTP struct {
 	queueMirrorLo map[string]chan *mirrorJob
 }
 
-func newProxy(cfg *proxyConfig) (*HTTP, error) {
+func newHTTP(cfg *httpConfig) (*HTTP, error) {
 	l := zap.L().With(zap.String("proxy_name", cfg.name))
 
 	p := &HTTP{
@@ -155,37 +156,23 @@ func newProxy(cfg *proxyConfig) (*HTTP, error) {
 		}
 	}
 
-	if cfg.proxy.HealthcheckURL != "" {
-		p.healthcheckURI = fasthttp.AcquireURI()
-		if err := p.healthcheckURI.Parse(nil, []byte(cfg.proxy.HealthcheckURL)); err != nil {
+	if cfg.proxy.Healthcheck.URL != "" {
+		h, err := newHealthcheck(
+			cfg.name,
+			cfg.proxy.Healthcheck.URL,
+			cfg.proxy.Healthcheck.Interval,
+			p.cfg.proxy.Healthcheck.ThresholdHealthy,
+			p.cfg.proxy.Healthcheck.ThresholdUnhealthy,
+			p.backendUnhealthy,
+		)
+		if err != nil {
 			fasthttp.ReleaseURI(p.backendURI)
 			for _, uri := range p.peerURIs {
 				fasthttp.ReleaseURI(uri)
 			}
-			fasthttp.ReleaseURI(p.healthcheckURI)
 			return nil, err
 		}
-
-		p.healthcheck = &fasthttp.Client{
-			MaxConnsPerHost:     1,
-			MaxConnWaitTimeout:  cfg.proxy.HealthcheckInterval / 2,
-			MaxIdleConnDuration: 2 * cfg.proxy.HealthcheckInterval,
-			MaxResponseBodySize: 4096,
-			Name:                cfg.name + "-healthcheck",
-			ReadTimeout:         cfg.proxy.HealthcheckInterval / 2,
-			WriteTimeout:        cfg.proxy.HealthcheckInterval / 2,
-		}
-
-		p.healthcheckTicker = time.NewTicker(cfg.proxy.HealthcheckInterval)
-
-		p.healthcheckDepth = max(
-			p.cfg.proxy.HealthcheckThresholdHealthy,
-			p.cfg.proxy.HealthcheckThresholdUnhealthy,
-		)
-
-		p.healthcheckStatuses = data.NewRingBuffer[bool](p.healthcheckDepth)
-
-		p.isHealthy = true
+		p.healthcheck = h
 	}
 
 	if len(cfg.proxy.ExtraMirroredJrpcMethods) > 0 {
@@ -292,12 +279,8 @@ func (p *HTTP) Run(ctx context.Context, failure chan<- error) {
 		}
 	}
 
-	if p.cfg.proxy.HealthcheckURL != "" {
-		go func() {
-			for {
-				p.backendHealthcheck(ctx, <-p.healthcheckTicker.C)
-			}
-		}()
+	if p.cfg.proxy.Healthcheck.URL != "" {
+		p.healthcheck.run(ctx)
 	}
 }
 
@@ -310,9 +293,8 @@ func (p *HTTP) Stop(ctx context.Context) error {
 		p.stop()
 	}
 
-	if p.cfg.proxy.HealthcheckURL != "" {
-		p.healthcheckTicker.Stop()
-		fasthttp.ReleaseURI(p.healthcheckURI)
+	if p.cfg.proxy.Healthcheck.URL != "" {
+		p.healthcheck.stop()
 	}
 
 	res := p.frontend.ShutdownWithContext(ctx)
@@ -820,67 +802,12 @@ func (p *HTTP) connectionsCount() int {
 	return len(p.connections)
 }
 
-func (p *HTTP) backendHealthcheck(ctx context.Context, _ time.Time) {
+func (p *HTTP) backendUnhealthy(ctx context.Context) {
 	l := logutils.LoggerFromContext(ctx)
 
-	req := fasthttp.AcquireRequest()
-	defer fasthttp.ReleaseRequest(req)
-
-	res := fasthttp.AcquireResponse()
-	defer fasthttp.ReleaseResponse(res)
-
-	req.SetURI(p.healthcheckURI)
-	req.Header.SetMethod("GET")
-	req.SetTimeout(p.cfg.proxy.HealthcheckInterval / 2)
-
-	if err := p.backend.Do(req, res); err == nil {
-		switch res.StatusCode() {
-		case fasthttp.StatusOK, fasthttp.StatusAccepted:
-			p.healthcheckStatuses.Push(true)
-		default:
-			p.healthcheckStatuses.Push(false)
-		}
-	} else {
-		l.Warn("Failed to query the healthcheck endpoint",
-			zap.Error(err),
-			zap.String("proxy", p.cfg.name),
-		)
-		p.healthcheckStatuses.Push(false)
-	}
-
-	if p.healthcheckStatuses.Length() > p.healthcheckDepth {
-		_, _ = p.healthcheckStatuses.Pop()
-	}
-
-	isHealthy := true
-	for idx := p.healthcheckDepth - 1; idx >= p.healthcheckDepth-p.cfg.proxy.HealthcheckThresholdHealthy; idx-- {
-		if s, ok := p.healthcheckStatuses.At(idx); ok {
-			isHealthy = isHealthy && s
-		}
-	}
-
-	isUnhealthy := true
-	for idx := p.healthcheckDepth - 1; idx >= p.healthcheckDepth-p.cfg.proxy.HealthcheckThresholdUnhealthy; idx-- {
-		if s, ok := p.healthcheckStatuses.At(idx); ok {
-			isUnhealthy = isUnhealthy && !s
-		}
-	}
-
-	if p.isHealthy && isUnhealthy {
-		p.isHealthy = false
-		l.Info("Backend became unhealthy",
-			zap.String("proxy", p.cfg.name),
-		)
-	} else if !p.isHealthy && isHealthy {
-		p.isHealthy = true
-		l.Info("Backend is healthy again",
-			zap.String("proxy", p.cfg.name),
-		)
-	}
-
-	if !p.isHealthy && p.connectionsCount() > 0 {
+	if p.connectionsCount() > 0 {
 		l.Warn("Resetting frontend connections b/c backend is (still) unhealthy...",
-			zap.String("proxy", p.cfg.name),
+			zap.String("proxy_name", p.cfg.name),
 		)
 		p.ResetConnections()
 	}

@@ -31,9 +31,9 @@ func NewRpcProxy(
 	cfg *config.RpcProxy,
 	chaos *config.Chaos,
 ) (*RpcProxy, error) {
-	p, err := newProxy(&proxyConfig{
+	p, err := newHTTP(&httpConfig{
 		name:  "bproxy-rpc",
-		proxy: cfg.Proxy,
+		proxy: cfg.HttpProxy,
 		chaos: chaos,
 	})
 	if err != nil {

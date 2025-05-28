@@ -25,8 +25,9 @@ type Server struct {
 	failure chan error
 	logger  *zap.Logger
 
-	authrpc *proxy.AuthrpcProxy
-	rpc     *proxy.RpcProxy
+	authrpc     *proxy.AuthrpcProxy
+	flashblocks *proxy.FlashblocksProxy
+	rpc         *proxy.RpcProxy
 
 	metrics *http.Server
 }
@@ -44,6 +45,14 @@ func New(cfg *config.Config) (*Server, error) {
 			return nil, err
 		}
 		s.authrpc = authrpc
+	}
+
+	if cfg.FlashblocksProxy.Enabled {
+		flashblocks, err := proxy.NewFlashblocksProxy(s.cfg.FlashblocksProxy)
+		if err != nil {
+			return nil, err
+		}
+		s.flashblocks = flashblocks
 	}
 
 	if cfg.RpcProxy.Enabled {
@@ -89,6 +98,7 @@ func (s *Server) Run() error {
 	}()
 
 	s.authrpc.Run(ctx, s.failure)
+	s.flashblocks.Run(ctx, s.failure)
 	s.rpc.Run(ctx, s.failure)
 
 	errs := []error{}
@@ -107,6 +117,7 @@ func (s *Server) Run() error {
 					zap.String("signal", reset.String()),
 				)
 				s.authrpc.ResetConnections()
+				s.flashblocks.ResetConnections()
 				s.rpc.ResetConnections()
 
 			case stop := <-terminator:
@@ -147,6 +158,16 @@ func (s *Server) Run() error {
 		}
 	}
 
+	{ // stop the flashblocks proxy
+		ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+		defer cancel()
+		if err := s.flashblocks.Stop(ctx); err != nil {
+			l.Error("Failed to shutdown proxy for flashblocks",
+				zap.Error(err),
+			)
+		}
+	}
+
 	{ // stop the authrpc proxy
 		ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 		defer cancel()
@@ -174,6 +195,10 @@ func (s *Server) observe(ctx context.Context, o otelapi.Observer) error {
 	errs := make([]error, 0, 2)
 
 	if err := s.authrpc.Observe(ctx, o); err != nil {
+		errs = append(errs, err)
+	}
+
+	if err := s.flashblocks.Observe(ctx, o); err != nil {
 		errs = append(errs, err)
 	}
 

@@ -12,15 +12,16 @@ import (
 )
 
 const (
-	categoryChaos   = "chaos"
-	categoryAuthRPC = "authrpc"
-	categoryRPC     = "rpc"
-	categoryMetrics = "metrics"
+	categoryChaos       = "chaos"
+	categoryAuthrpc     = "authrpc"
+	categoryFlashblocks = "flashblocks"
+	categoryRPC         = "rpc"
+	categoryMetrics     = "metrics"
 )
 
 func CommandServe(cfg *config.Config) *cli.Command {
-	proxyFlags := func(
-		cfg *config.Proxy, category string, backendURL, listenAddress string,
+	makeProxyFlags := func(
+		cfg *config.HttpProxy, category string, backendURL, listenAddress string,
 	) (flags []cli.Flag, extraMirroredJrpcMethods, peerURLsFlag *cli.StringSlice) {
 		extraMirroredJrpcMethods = &cli.StringSlice{}
 		peerURLsFlag = &cli.StringSlice{}
@@ -73,7 +74,7 @@ func CommandServe(cfg *config.Config) *cli.Command {
 			&cli.StringFlag{ // --xxx-healthcheck
 				Category:    strings.ToUpper(category),
 				DefaultText: "disabled",
-				Destination: &cfg.HealthcheckURL,
+				Destination: &cfg.Healthcheck.URL,
 				EnvVars:     []string{envPrefix + strings.ToUpper(category) + "_HEALTHCHECK"},
 				Name:        category + "-healthcheck",
 				Usage:       "`url` of " + category + " backend healthcheck endpoint",
@@ -82,7 +83,7 @@ func CommandServe(cfg *config.Config) *cli.Command {
 
 			&cli.DurationFlag{ // --xxx-healthcheck-interval
 				Category:    strings.ToUpper(category),
-				Destination: &cfg.HealthcheckInterval,
+				Destination: &cfg.Healthcheck.Interval,
 				EnvVars:     []string{envPrefix + strings.ToUpper(category) + "_HEALTHCHECK_INTERVAL"},
 				Name:        category + "-healthcheck-interval",
 				Usage:       "`interval` between consecutive " + category + " backend healthchecks",
@@ -91,7 +92,7 @@ func CommandServe(cfg *config.Config) *cli.Command {
 
 			&cli.IntFlag{ // --xxx-healthcheck-threshold-healthy
 				Category:    strings.ToUpper(category),
-				Destination: &cfg.HealthcheckThresholdHealthy,
+				Destination: &cfg.Healthcheck.ThresholdHealthy,
 				EnvVars:     []string{envPrefix + strings.ToUpper(category) + "_HEALTHCHECK_THRESHOLD_HEALTHY"},
 				Name:        category + "-healthcheck-threshold-healthy",
 				Usage:       "`count` of consecutive successful healthchecks to consider " + category + " backend to be healthy",
@@ -100,7 +101,7 @@ func CommandServe(cfg *config.Config) *cli.Command {
 
 			&cli.IntFlag{ // --xxx-healthcheck-threshold-unhealthy
 				Category:    strings.ToUpper(category),
-				Destination: &cfg.HealthcheckThresholdUnhealthy,
+				Destination: &cfg.Healthcheck.ThresholdUnhealthy,
 				EnvVars:     []string{envPrefix + strings.ToUpper(category) + "_HEALTHCHECK_THRESHOLD_UNHEALTHY"},
 				Name:        category + "-healthcheck-threshold-unhealthy",
 				Usage:       "`count` of consecutive failed healthchecks to consider " + category + " backend to be unhealthy",
@@ -125,7 +126,7 @@ func CommandServe(cfg *config.Config) *cli.Command {
 				Value:       false,
 			},
 
-			&cli.IntFlag{
+			&cli.IntFlag{ // --xxx-log-requests-max-size
 				Category:    strings.ToUpper(category),
 				Destination: &cfg.LogRequestsMaxSize,
 				EnvVars:     []string{envPrefix + strings.ToUpper(category) + "_LOG_REQUESTS_MAX_SIZE"},
@@ -143,7 +144,7 @@ func CommandServe(cfg *config.Config) *cli.Command {
 				Value:       false,
 			},
 
-			&cli.IntFlag{
+			&cli.IntFlag{ // --xxx-log-responses-max-size
 				Category:    strings.ToUpper(category),
 				Destination: &cfg.LogResponsesMaxSize,
 				EnvVars:     []string{envPrefix + strings.ToUpper(category) + "_LOG_RESPONSES_MAX_SIZE"},
@@ -229,7 +230,7 @@ func CommandServe(cfg *config.Config) *cli.Command {
 				DefaultText: "uses plain-text http",
 				EnvVars:     []string{envPrefix + strings.ToUpper(category) + "_TLS_CRT"},
 				Name:        category + "-tls-crt",
-				Usage:       "`path` to tls certificate",
+				Usage:       "`path` to " + category + " tls certificate",
 			},
 
 			&cli.StringFlag{ // --xxx-tls-key
@@ -238,7 +239,7 @@ func CommandServe(cfg *config.Config) *cli.Command {
 				Destination: &cfg.TLSKey,
 				EnvVars:     []string{envPrefix + strings.ToUpper(category) + "_TLS_KEY"},
 				Name:        category + "-tls-key",
-				Usage:       "`path` to tls key",
+				Usage:       "`path` to " + category + " tls key",
 			},
 
 			&cli.BoolFlag{ // --xxx-use-priority-queue
@@ -253,21 +254,21 @@ func CommandServe(cfg *config.Config) *cli.Command {
 		return
 	}
 
-	authrpcFlags, extraMirroredJrpcMethodsAuthRPC, peerURLsAuthRPC := proxyFlags(
-		cfg.AuthrpcProxy.Proxy, categoryAuthRPC, "http://127.0.0.1:18551", "0.0.0.0:8551",
+	authrpcFlags, extraMirroredJrpcMethodsAuthRPC, peerURLsAuthRPC := makeProxyFlags(
+		cfg.AuthrpcProxy.HttpProxy, categoryAuthrpc, "http://127.0.0.1:18551", "0.0.0.0:8551",
 	)
 
-	authrpcFlags = append(authrpcFlags,
+	authrpcFlags = append(authrpcFlags, // --authrpc-xxx
 		&cli.BoolFlag{ // --authrpc-deduplicate-fcus
-			Category:    strings.ToUpper(categoryAuthRPC),
+			Category:    strings.ToUpper(categoryAuthrpc),
 			Destination: &cfg.AuthrpcProxy.DeduplicateFCUs,
-			EnvVars:     []string{envPrefix + strings.ToUpper(categoryAuthRPC) + "_DEDUPLICATE_FCUS"},
-			Name:        categoryAuthRPC + "-deduplicate-fcus",
+			EnvVars:     []string{envPrefix + strings.ToUpper(categoryAuthrpc) + "_DEDUPLICATE_FCUS"},
+			Name:        categoryAuthrpc + "-deduplicate-fcus",
 			Usage:       "deduplicate repetitive fcu messages",
 		},
 	)
 
-	chaosFlags := []cli.Flag{ // chaos
+	chaosFlags := []cli.Flag{ // --chaos-xxx
 		&cli.BoolFlag{ // --chaos-enabled
 			Category:    strings.ToUpper(categoryChaos),
 			Destination: &cfg.Chaos.Enabled,
@@ -322,11 +323,131 @@ func CommandServe(cfg *config.Config) *cli.Command {
 		},
 	}
 
-	rpcFlags, extraMirroredJrpcMethodsRPC, peerURLsRPC := proxyFlags(
-		cfg.RpcProxy.Proxy, categoryRPC, "http://127.0.0.1:18545", "0.0.0.0:8545",
+	flashblocksFlags := []cli.Flag{ // --flashblocks-xxx
+		&cli.StringFlag{ // --flashblocks-backend
+			Category:    strings.ToUpper(categoryFlashblocks),
+			Destination: &cfg.FlashblocksProxy.BackendURL,
+			EnvVars:     []string{envPrefix + strings.ToUpper(categoryFlashblocks) + "_BACKEND"},
+			Name:        categoryFlashblocks + "-backend",
+			Usage:       "`url` of flashblocks backend",
+			Value:       "ws://127.0.0.1:11111",
+		},
+
+		&cli.BoolFlag{ // --flashblocks-enabled
+			Category:    strings.ToUpper(categoryFlashblocks),
+			Destination: &cfg.FlashblocksProxy.Enabled,
+			EnvVars:     []string{envPrefix + strings.ToUpper(categoryFlashblocks) + "_ENABLED"},
+			Name:        categoryFlashblocks + "-enabled",
+			Usage:       "enable flashblocks proxy",
+			Value:       false,
+		},
+
+		&cli.StringFlag{ // --flashblocks-healthcheck
+			Category:    strings.ToUpper(categoryFlashblocks),
+			DefaultText: "disabled",
+			Destination: &cfg.FlashblocksProxy.Healthcheck.URL,
+			EnvVars:     []string{envPrefix + strings.ToUpper(categoryFlashblocks) + "_HEALTHCHECK"},
+			Name:        categoryFlashblocks + "-healthcheck",
+			Usage:       "`url` of flashblocks backend healthcheck endpoint",
+			Value:       "",
+		},
+
+		&cli.DurationFlag{ // --flashblocks-healthcheck-interval
+			Category:    strings.ToUpper(categoryFlashblocks),
+			Destination: &cfg.FlashblocksProxy.Healthcheck.Interval,
+			EnvVars:     []string{envPrefix + strings.ToUpper(categoryFlashblocks) + "_HEALTHCHECK_INTERVAL"},
+			Name:        categoryFlashblocks + "-healthcheck-interval",
+			Usage:       "`interval` between consecutive flashblocks backend healthchecks",
+			Value:       time.Second,
+		},
+
+		&cli.IntFlag{ // --flashblocks-healthcheck-threshold-healthy
+			Category:    strings.ToUpper(categoryFlashblocks),
+			Destination: &cfg.FlashblocksProxy.Healthcheck.ThresholdHealthy,
+			EnvVars:     []string{envPrefix + strings.ToUpper(categoryFlashblocks) + "_HEALTHCHECK_THRESHOLD_HEALTHY"},
+			Name:        categoryFlashblocks + "-healthcheck-threshold-healthy",
+			Usage:       "`count` of consecutive successful healthchecks to consider flashblocks backend to be healthy",
+			Value:       2,
+		},
+
+		&cli.IntFlag{ // --flashblocks-healthcheck-threshold-unhealthy
+			Category:    strings.ToUpper(categoryFlashblocks),
+			Destination: &cfg.FlashblocksProxy.Healthcheck.ThresholdUnhealthy,
+			EnvVars:     []string{envPrefix + strings.ToUpper(categoryFlashblocks) + "_HEALTHCHECK_THRESHOLD_UNHEALTHY"},
+			Name:        categoryFlashblocks + "-healthcheck-threshold-unhealthy",
+			Usage:       "`count` of consecutive failed healthchecks to consider flashblocks backend to be unhealthy",
+			Value:       2,
+		},
+
+		&cli.StringFlag{ // --flashblocks-listen-address
+			Category:    strings.ToUpper(categoryFlashblocks),
+			Destination: &cfg.FlashblocksProxy.ListenAddress,
+			EnvVars:     []string{envPrefix + strings.ToUpper(categoryFlashblocks) + "_LISTEN_ADDRESS"},
+			Name:        categoryFlashblocks + "-listen-address",
+			Usage:       "`host:port` for flashblocks proxy",
+			Value:       "0.0.0.0:1111",
+		},
+
+		&cli.BoolFlag{ // --flashblocks-log-messages
+			Category:    strings.ToUpper(categoryFlashblocks),
+			Destination: &cfg.FlashblocksProxy.LogMessages,
+			EnvVars:     []string{envPrefix + strings.ToUpper(categoryFlashblocks) + "_LOG_MESSAGES"},
+			Name:        categoryFlashblocks + "-log-messages",
+			Usage:       "whether to log flashblocks messages",
+			Value:       false,
+		},
+
+		&cli.IntFlag{ // --flashblocks-log-messages-max-size
+			Category:    strings.ToUpper(categoryFlashblocks),
+			Destination: &cfg.FlashblocksProxy.LogMessagesMaxSize,
+			EnvVars:     []string{envPrefix + strings.ToUpper(categoryFlashblocks) + "_LOG_MESSAGES_MAX_SIZE"},
+			Name:        categoryFlashblocks + "-log-messages-max-size",
+			Usage:       "do not log flashblocks messages larger than `size`",
+			Value:       4096,
+		},
+
+		&cli.IntFlag{ // --flashblocks-read-buffer-size
+			Category:    strings.ToUpper(categoryFlashblocks),
+			Destination: &cfg.FlashblocksProxy.ReadBufferSize,
+			EnvVars:     []string{envPrefix + strings.ToUpper(categoryFlashblocks) + "_READ_BUFFER_SIZE"},
+			Name:        categoryFlashblocks + "-read-buffer-size",
+			Usage:       "flashblocks read buffer size in `megabytes` (messages from client)",
+			Value:       16,
+		},
+
+		&cli.StringFlag{ // --flashblocks-tls-crt
+			Category:    strings.ToUpper(categoryFlashblocks),
+			Destination: &cfg.FlashblocksProxy.TLSCertificate,
+			DefaultText: "uses plain-text http",
+			EnvVars:     []string{envPrefix + strings.ToUpper(categoryFlashblocks) + "_TLS_CRT"},
+			Name:        categoryFlashblocks + "-tls-crt",
+			Usage:       "`path` to flashblocks tls certificate",
+		},
+
+		&cli.StringFlag{ // --flashblocks-tls-key
+			Category:    strings.ToUpper(categoryFlashblocks),
+			DefaultText: "uses plain-text http",
+			Destination: &cfg.FlashblocksProxy.TLSKey,
+			EnvVars:     []string{envPrefix + strings.ToUpper(categoryFlashblocks) + "_TLS_KEY"},
+			Name:        categoryFlashblocks + "-tls-key",
+			Usage:       "`path` to flashblocks tls key",
+		},
+
+		&cli.IntFlag{ // --flashblocks-write-buffer-size
+			Category:    strings.ToUpper(categoryFlashblocks),
+			Destination: &cfg.FlashblocksProxy.WriteBufferSize,
+			EnvVars:     []string{envPrefix + strings.ToUpper(categoryFlashblocks) + "_WRITE_BUFFER_SIZE"},
+			Name:        categoryFlashblocks + "-write-buffer-size",
+			Usage:       "flashblocks write buffer size in `megabytes` (messages from backend)",
+			Value:       16,
+		},
+	}
+
+	rpcFlags, extraMirroredJrpcMethodsRPC, peerURLsRPC := makeProxyFlags(
+		cfg.RpcProxy.HttpProxy, categoryRPC, "http://127.0.0.1:18545", "0.0.0.0:8545",
 	)
 
-	metricsFlags := []cli.Flag{ // metrics
+	metricsFlags := []cli.Flag{ // --metrics-xxx
 		&cli.StringFlag{ // --metrics-listen-address
 			Category:    strings.ToUpper(categoryMetrics),
 			Destination: &cfg.Metrics.ListenAddress,
@@ -338,9 +459,10 @@ func CommandServe(cfg *config.Config) *cli.Command {
 	}
 
 	flags := slices.Concat(
-		chaosFlags,
 		authrpcFlags,
+		flashblocksFlags,
 		rpcFlags,
+		chaosFlags,
 		metricsFlags,
 	)
 

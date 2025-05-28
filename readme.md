@@ -35,8 +35,8 @@ OPTIONS:
    --authrpc-peer-tls-insecure-skip-verify                                                          do not verify authrpc peers' tls certificates (default: false) [$BPROXY_AUTHRPC_PEER_TLS_INSECURE_SKIP_VERIFY]
    --authrpc-peers urls [ --authrpc-peers urls ]                                                    list of authrpc peers urls to mirror the requests to [$BPROXY_AUTHRPC_PEERS]
    --authrpc-remove-backend-from-peers                                                              remove authrpc backend from peers (default: false) [$BPROXY_AUTHRPC_REMOVE_BACKEND_FROM_PEERS]
-   --authrpc-tls-crt path                                                                           path to tls certificate (default: uses plain-text http) [$BPROXY_AUTHRPC_TLS_CRT]
-   --authrpc-tls-key path                                                                           path to tls key (default: uses plain-text http) [$BPROXY_AUTHRPC_TLS_KEY]
+   --authrpc-tls-crt path                                                                           path to authrpc tls certificate (default: uses plain-text http) [$BPROXY_AUTHRPC_TLS_CRT]
+   --authrpc-tls-key path                                                                           path to authrpc tls key (default: uses plain-text http) [$BPROXY_AUTHRPC_TLS_KEY]
    --authrpc-use-priority-queue                                                                     whether to prioritise "important" calls over the rest (default: false) [$BPROXY_AUTHRPC_USE_PRIORITY_QUEUE]
 
    CHAOS
@@ -47,6 +47,22 @@ OPTIONS:
    --chaos-injected-jrpc-error-probability percent             probability in percent at which to randomly inject jrpc errors into proxied responses (default: 20) [$BPROXY_CHAOS_INJECTED_JRPC_ERROR_PROBABILITY]
    --chaos-max-injected-latency latency                        max latency to randomly enforce on every proxied response (default: 0s) [$BPROXY_CHAOS_MAX_INJECTED_LATENCY]
    --chaos-min-injected-latency latency                        min latency to enforce on every proxied response (default: 50ms) [$BPROXY_CHAOS_MIN_INJECTED_LATENCY]
+
+   FLASHBLOCKS
+
+   --flashblocks-backend url                            url of flashblocks backend (default: "ws://127.0.0.1:11111") [$BPROXY_FLASHBLOCKS_BACKEND]
+   --flashblocks-enabled                                enable flashblocks proxy (default: false) [$BPROXY_FLASHBLOCKS_ENABLED]
+   --flashblocks-healthcheck url                        url of flashblocks backend healthcheck endpoint (default: disabled) [$BPROXY_FLASHBLOCKS_HEALTHCHECK]
+   --flashblocks-healthcheck-interval interval          interval between consecutive flashblocks backend healthchecks (default: 1s) [$BPROXY_FLASHBLOCKS_HEALTHCHECK_INTERVAL]
+   --flashblocks-healthcheck-threshold-healthy count    count of consecutive successful healthchecks to consider flashblocks backend to be healthy (default: 2) [$BPROXY_FLASHBLOCKS_HEALTHCHECK_THRESHOLD_HEALTHY]
+   --flashblocks-healthcheck-threshold-unhealthy count  count of consecutive failed healthchecks to consider flashblocks backend to be unhealthy (default: 2) [$BPROXY_FLASHBLOCKS_HEALTHCHECK_THRESHOLD_UNHEALTHY]
+   --flashblocks-listen-address host:port               host:port for flashblocks proxy (default: "0.0.0.0:1111") [$BPROXY_FLASHBLOCKS_LISTEN_ADDRESS]
+   --flashblocks-log-messages                           whether to log flashblocks messages (default: false) [$BPROXY_FLASHBLOCKS_LOG_MESSAGES]
+   --flashblocks-log-messages-max-size size             do not log flashblocks messages larger than size (default: 4096) [$BPROXY_FLASHBLOCKS_LOG_MESSAGES_MAX_SIZE]
+   --flashblocks-read-buffer-size megabytes             flashblocks read buffer size in megabytes (messages from client) (default: 16) [$BPROXY_FLASHBLOCKS_READ_BUFFER_SIZE]
+   --flashblocks-tls-crt path                           path to flashblocks tls certificate (default: uses plain-text http) [$BPROXY_FLASHBLOCKS_TLS_CRT]
+   --flashblocks-tls-key path                           path to flashblocks tls key (default: uses plain-text http) [$BPROXY_FLASHBLOCKS_TLS_KEY]
+   --flashblocks-write-buffer-size megabytes            flashblocks write buffer size in megabytes (messages from backend) (default: 16) [$BPROXY_FLASHBLOCKS_WRITE_BUFFER_SIZE]
 
    METRICS
 
@@ -76,7 +92,7 @@ OPTIONS:
    --rpc-peer-tls-insecure-skip-verify                                                      do not verify rpc peers' tls certificates (default: false) [$BPROXY_RPC_PEER_TLS_INSECURE_SKIP_VERIFY]
    --rpc-peers urls [ --rpc-peers urls ]                                                    list of rpc peers urls to mirror the requests to [$BPROXY_RPC_PEERS]
    --rpc-remove-backend-from-peers                                                          remove rpc backend from peers (default: false) [$BPROXY_RPC_REMOVE_BACKEND_FROM_PEERS]
-   --rpc-tls-crt path                                                                       path to tls certificate (default: uses plain-text http) [$BPROXY_RPC_TLS_CRT]
-   --rpc-tls-key path                                                                       path to tls key (default: uses plain-text http) [$BPROXY_RPC_TLS_KEY]
+   --rpc-tls-crt path                                                                       path to rpc tls certificate (default: uses plain-text http) [$BPROXY_RPC_TLS_CRT]
+   --rpc-tls-key path                                                                       path to rpc tls key (default: uses plain-text http) [$BPROXY_RPC_TLS_KEY]
    --rpc-use-priority-queue                                                                 whether to prioritise "important" calls over the rest (default: false) [$BPROXY_RPC_USE_PRIORITY_QUEUE]
 ```

@@ -13,16 +13,13 @@ import (
 	"github.com/flashbots/bproxy/utils"
 )
 
-type Proxy struct {
+type HttpProxy struct {
 	BackendTimeout                  time.Duration `yaml:"backend_timeout"`
 	BackendURL                      string        `yaml:"backend_url"`
 	ClientIdleConnectionTimeout     time.Duration `yaml:"client_idle_connection_timeout"`
 	Enabled                         bool          `yaml:"enabled"`
 	ExtraMirroredJrpcMethods        []string      `yaml:"extra_mirrored_jrpc_methods"`
-	HealthcheckInterval             time.Duration `yaml:"healthcheck_interval"`
-	HealthcheckThresholdHealthy     int           `yaml:"healthcheck_threshold_healthy"`
-	HealthcheckThresholdUnhealthy   int           `yaml:"healthcheck_threshold_unhealthy"`
-	HealthcheckURL                  string        `yaml:"healthcheck_url"`
+	Healthcheck                     *Healthcheck  `yaml:"healthcheck"`
 	ListenAddress                   string        `yaml:"listen_address"`
 	LogRequests                     bool          `yaml:"log_requests"`
 	LogRequestsMaxSize              int           `yaml:"log_requests_max_size"`
@@ -42,36 +39,32 @@ type Proxy struct {
 }
 
 var (
-	errProxyFailedToGetLocalIPs                    = errors.New("failed to get local ip addresses")
-	errProxyInvalidBackendTimeout                  = errors.New("invalid backend timeout")
-	errProxyInvalidBackendURL                      = errors.New("invalid backend url")
-	errProxyInvalidClientIdleConnectionTimeout     = errors.New("invalid client connection idle timeout")
-	errProxyInvalidHealthcheckInterval             = errors.New("invalid healthcheck interval")
-	errProxyInvalidHealthcheckThresholdHealthy     = errors.New("invalid healthcheck healthy threshold")
-	errProxyInvalidHealthcheckThresholdUnhealthy   = errors.New("invalid healthcheck unhealthy threshold")
-	errProxyInvalidHealthcheckURL                  = errors.New("invalid healthcheck url")
-	errProxyInvalidListenAddress                   = errors.New("invalid proxy listen address")
-	errProxyInvalidMaxBackendConnectionsPerHost    = errors.New("invalid max backend connections per host")
-	errProxyInvalidMaxBackendConnectionWaitTimeout = errors.New("invalid max backend connection wait timeout")
-	errProxyInvalidMaxClientConnectionsPerIP       = errors.New("invalid max client connections per ip")
-	errProxyInvalidMaxRequestSize                  = errors.New("invalid max request size")
-	errProxyInvalidMaxResponseSize                 = errors.New("invalid max response size")
-	errProxyInvalidPeerURL                         = errors.New("invalid peer url")
-	errProxyInvalidTLSConfig                       = errors.New("invalid tls configuration")
+	errHttpProxyFailedToGetLocalIPs                    = errors.New("failed to get local ip addresses")
+	errHttpProxyInvalidBackendTimeout                  = errors.New("invalid backend timeout")
+	errHttpProxyInvalidBackendURL                      = errors.New("invalid backend url")
+	errHttpProxyInvalidClientIdleConnectionTimeout     = errors.New("invalid client connection idle timeout")
+	errHttpProxyInvalidListenAddress                   = errors.New("invalid proxy listen address")
+	errHttpProxyInvalidMaxBackendConnectionsPerHost    = errors.New("invalid max backend connections per host")
+	errHttpProxyInvalidMaxBackendConnectionWaitTimeout = errors.New("invalid max backend connection wait timeout")
+	errHttpProxyInvalidMaxClientConnectionsPerIP       = errors.New("invalid max client connections per ip")
+	errHttpProxyInvalidMaxRequestSize                  = errors.New("invalid max request size")
+	errHttpProxyInvalidMaxResponseSize                 = errors.New("invalid max response size")
+	errHttpProxyInvalidPeerURL                         = errors.New("invalid peer url")
+	errHttpProxyInvalidTLSConfig                       = errors.New("invalid tls configuration")
 )
 
-func (cfg *Proxy) Validate() error {
+func (cfg *HttpProxy) Validate() error {
 	errs := make([]error, 0)
 
 	{ // BackendTimeout
 		if cfg.BackendTimeout <= 0 {
 			errs = append(errs, fmt.Errorf("%w: can't be negative: %s",
-				errProxyInvalidBackendTimeout, cfg.BackendTimeout,
+				errHttpProxyInvalidBackendTimeout, cfg.BackendTimeout,
 			))
 		}
 		if cfg.BackendTimeout > 30*time.Second {
 			errs = append(errs, fmt.Errorf("%w: too high, must be <=30s: %s",
-				errProxyInvalidBackendTimeout, cfg.BackendTimeout,
+				errHttpProxyInvalidBackendTimeout, cfg.BackendTimeout,
 			))
 		}
 	}
@@ -83,7 +76,7 @@ func (cfg *Proxy) Validate() error {
 			localIPs, err = utils.LocalIPs()
 			if err != nil {
 				errs = append(errs, fmt.Errorf("%w: %s: %w",
-					errProxyFailedToGetLocalIPs, cfg.ListenAddress, err,
+					errHttpProxyFailedToGetLocalIPs, cfg.ListenAddress, err,
 				))
 			}
 		}
@@ -91,14 +84,14 @@ func (cfg *Proxy) Validate() error {
 		backendURL, err := url.Parse(cfg.BackendURL)
 		if err != nil {
 			errs = append(errs, fmt.Errorf("%w: %s: %w:",
-				errProxyInvalidBackendURL, cfg.BackendURL, err,
+				errHttpProxyInvalidBackendURL, cfg.BackendURL, err,
 			))
 		}
 
 		backendIPs, err := net.LookupIP(backendURL.Hostname())
 		if err != nil {
 			errs = append(errs, fmt.Errorf("%w: %s: %w:",
-				errProxyInvalidBackendURL, cfg.BackendURL, err,
+				errHttpProxyInvalidBackendURL, cfg.BackendURL, err,
 			))
 		}
 
@@ -107,7 +100,7 @@ func (cfg *Proxy) Validate() error {
 			peerURL, err := url.Parse(p)
 			if err != nil {
 				errs = append(errs, fmt.Errorf("%w: %s: %w",
-					errProxyInvalidPeerURL, p, err,
+					errHttpProxyInvalidPeerURL, p, err,
 				))
 				continue
 			}
@@ -144,69 +137,20 @@ func (cfg *Proxy) Validate() error {
 	{ // ClientIdleConnectionTimeout
 		if cfg.ClientIdleConnectionTimeout <= 0 {
 			errs = append(errs, fmt.Errorf("%w: can't be negative: %s",
-				errProxyInvalidClientIdleConnectionTimeout, cfg.ClientIdleConnectionTimeout,
+				errHttpProxyInvalidClientIdleConnectionTimeout, cfg.ClientIdleConnectionTimeout,
 			))
 		}
 		if cfg.ClientIdleConnectionTimeout > 60*time.Hour {
 			errs = append(errs, fmt.Errorf("%w: too high, must be <=60m: %s",
-				errProxyInvalidClientIdleConnectionTimeout, cfg.ClientIdleConnectionTimeout,
+				errHttpProxyInvalidClientIdleConnectionTimeout, cfg.ClientIdleConnectionTimeout,
 			))
-		}
-	}
-
-	{ // HealthcheckInterval
-		if cfg.HealthcheckInterval < time.Second {
-			errs = append(errs, fmt.Errorf("%w: too low, must be >=1s: %s",
-				errProxyInvalidHealthcheckInterval, cfg.HealthcheckInterval,
-			))
-		}
-		if cfg.HealthcheckInterval > time.Minute {
-			errs = append(errs, fmt.Errorf("%w: too low, must be <=1m: %s",
-				errProxyInvalidHealthcheckInterval, cfg.HealthcheckInterval,
-			))
-		}
-	}
-
-	{ // HealthcheckThresholdHealthy
-		if cfg.HealthcheckThresholdHealthy < 1 {
-			errs = append(errs, fmt.Errorf("%w: too low, must be >=1: %d",
-				errProxyInvalidHealthcheckThresholdHealthy, cfg.HealthcheckThresholdHealthy,
-			))
-		}
-		if cfg.HealthcheckThresholdHealthy > 10 {
-			errs = append(errs, fmt.Errorf("%w: too low, must be <=10: %d",
-				errProxyInvalidHealthcheckThresholdHealthy, cfg.HealthcheckThresholdHealthy,
-			))
-		}
-	}
-
-	{ // HealthcheckThresholdUnhealthy
-		if cfg.HealthcheckThresholdUnhealthy < 1 {
-			errs = append(errs, fmt.Errorf("%w: too low, must be >=1: %d",
-				errProxyInvalidHealthcheckThresholdUnhealthy, cfg.HealthcheckThresholdUnhealthy,
-			))
-		}
-		if cfg.HealthcheckThresholdUnhealthy > 10 {
-			errs = append(errs, fmt.Errorf("%w: too low, must be <=10: %d",
-				errProxyInvalidHealthcheckThresholdUnhealthy, cfg.HealthcheckThresholdUnhealthy,
-			))
-		}
-	}
-
-	{ // HealthcheckURL
-		if cfg.HealthcheckURL != "" {
-			if _, err := url.Parse(cfg.HealthcheckURL); err != nil {
-				errs = append(errs, fmt.Errorf("%w: %w",
-					errProxyInvalidHealthcheckURL, err,
-				))
-			}
 		}
 	}
 
 	{ // ListenAddress
 		if _, err := net.ResolveTCPAddr("tcp", cfg.ListenAddress); err != nil {
 			errs = append(errs, fmt.Errorf("%w: %s: %w",
-				errProxyInvalidListenAddress, cfg.ListenAddress, err,
+				errHttpProxyInvalidListenAddress, cfg.ListenAddress, err,
 			))
 		}
 	}
@@ -214,12 +158,12 @@ func (cfg *Proxy) Validate() error {
 	{ // MaxBackendConnectionsPerHost
 		if cfg.MaxBackendConnectionsPerHost < 0 {
 			errs = append(errs, fmt.Errorf("%w: can't be negative: %d",
-				errProxyInvalidMaxBackendConnectionsPerHost, cfg.MaxBackendConnectionsPerHost,
+				errHttpProxyInvalidMaxBackendConnectionsPerHost, cfg.MaxBackendConnectionsPerHost,
 			))
 		}
 		if cfg.MaxBackendConnectionsPerHost > 1024 {
 			errs = append(errs, fmt.Errorf("%w: too high, must be <=1024: %d",
-				errProxyInvalidMaxBackendConnectionsPerHost, cfg.MaxBackendConnectionsPerHost,
+				errHttpProxyInvalidMaxBackendConnectionsPerHost, cfg.MaxBackendConnectionsPerHost,
 			))
 		}
 	}
@@ -227,12 +171,12 @@ func (cfg *Proxy) Validate() error {
 	{ // MaxBackendConnectionWaitTimeout
 		if cfg.MaxBackendConnectionWaitTimeout < 0 {
 			errs = append(errs, fmt.Errorf("%w: can't be negative: %s",
-				errProxyInvalidMaxBackendConnectionWaitTimeout, cfg.MaxBackendConnectionWaitTimeout,
+				errHttpProxyInvalidMaxBackendConnectionWaitTimeout, cfg.MaxBackendConnectionWaitTimeout,
 			))
 		}
 		if cfg.MaxBackendConnectionWaitTimeout > time.Minute {
 			errs = append(errs, fmt.Errorf("%w: too high, must be <=1m: %s",
-				errProxyInvalidMaxBackendConnectionWaitTimeout, cfg.MaxBackendConnectionWaitTimeout,
+				errHttpProxyInvalidMaxBackendConnectionWaitTimeout, cfg.MaxBackendConnectionWaitTimeout,
 			))
 		}
 	}
@@ -240,12 +184,12 @@ func (cfg *Proxy) Validate() error {
 	{ // MaxClientConnectionsPerIP
 		if cfg.MaxClientConnectionsPerIP < 0 {
 			errs = append(errs, fmt.Errorf("%w: can't be negative: %d",
-				errProxyInvalidMaxClientConnectionsPerIP, cfg.MaxClientConnectionsPerIP,
+				errHttpProxyInvalidMaxClientConnectionsPerIP, cfg.MaxClientConnectionsPerIP,
 			))
 		}
 		if cfg.MaxClientConnectionsPerIP > 1024 {
 			errs = append(errs, fmt.Errorf("%w: too high, must be <=1024: %d",
-				errProxyInvalidMaxClientConnectionsPerIP, cfg.MaxClientConnectionsPerIP,
+				errHttpProxyInvalidMaxClientConnectionsPerIP, cfg.MaxClientConnectionsPerIP,
 			))
 		}
 	}
@@ -253,12 +197,12 @@ func (cfg *Proxy) Validate() error {
 	{ // MaxRequestSizeMb
 		if cfg.MaxRequestSizeMb < 4 {
 			errs = append(errs, fmt.Errorf("%w: too low, must be >=4: %d",
-				errProxyInvalidMaxRequestSize, cfg.MaxRequestSizeMb,
+				errHttpProxyInvalidMaxRequestSize, cfg.MaxRequestSizeMb,
 			))
 		}
 		if cfg.MaxRequestSizeMb > 4096 {
 			errs = append(errs, fmt.Errorf("%w: too high, must be <=4096: %d",
-				errProxyInvalidMaxRequestSize, cfg.MaxRequestSizeMb,
+				errHttpProxyInvalidMaxRequestSize, cfg.MaxRequestSizeMb,
 			))
 		}
 	}
@@ -266,12 +210,12 @@ func (cfg *Proxy) Validate() error {
 	{ // MaxResponseSizeMb
 		if cfg.MaxResponseSizeMb < 4 {
 			errs = append(errs, fmt.Errorf("%w: too low, must be >=4: %d",
-				errProxyInvalidMaxResponseSize, cfg.MaxResponseSizeMb,
+				errHttpProxyInvalidMaxResponseSize, cfg.MaxResponseSizeMb,
 			))
 		}
 		if cfg.MaxResponseSizeMb > 4096 {
 			errs = append(errs, fmt.Errorf("%w: too high, must be <=4096: %d",
-				errProxyInvalidMaxResponseSize, cfg.MaxResponseSizeMb,
+				errHttpProxyInvalidMaxResponseSize, cfg.MaxResponseSizeMb,
 			))
 		}
 	}
@@ -280,15 +224,15 @@ func (cfg *Proxy) Validate() error {
 		if cfg.TLSCertificate != "" || cfg.TLSKey != "" {
 			if cfg.TLSCertificate == "" {
 				errs = append(errs, fmt.Errorf("%w: tls certificate must also be configured",
-					errProxyInvalidTLSConfig,
+					errHttpProxyInvalidTLSConfig,
 				))
 			} else if cfg.TLSKey == "" {
 				errs = append(errs, fmt.Errorf("%w: tls key must also be configured",
-					errProxyInvalidTLSConfig,
+					errHttpProxyInvalidTLSConfig,
 				))
 			} else if _, err := cfg.LoadTLSCertificate(); err != nil {
 				errs = append(errs, fmt.Errorf("%w: %w",
-					errProxyInvalidTLSConfig, err,
+					errHttpProxyInvalidTLSConfig, err,
 				))
 			}
 		}
@@ -297,7 +241,7 @@ func (cfg *Proxy) Validate() error {
 	return utils.FlattenErrors(errs)
 }
 
-func (cfg *Proxy) LoadTLSCertificate() (tls.Certificate, error) {
+func (cfg *HttpProxy) LoadTLSCertificate() (tls.Certificate, error) {
 	crt, err := os.ReadFile(cfg.TLSCertificate)
 	if err != nil {
 		return tls.Certificate{}, err

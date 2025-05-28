@@ -1,7 +1,7 @@
 package config
 
 type AuthrpcProxy struct {
-	*Proxy
+	*HttpProxy `yaml:"proxy"`
 
 	DeduplicateFCUs bool `yaml:"deduplicate_fcus"`
 }

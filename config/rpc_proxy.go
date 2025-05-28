@@ -1,5 +1,5 @@
 package config
 
 type RpcProxy struct {
-	*Proxy
+	*HttpProxy `yaml:"proxy"`
 }
