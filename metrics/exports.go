@@ -18,6 +18,7 @@ var (
 
 	MirrorSuccessCount otelapi.Int64Counter
 	MirrorFailureCount otelapi.Int64Counter
+	MirrorDropCount    otelapi.Int64Counter
 
 	FrontendConnectionsCount otelapi.Int64ObservableGauge
 

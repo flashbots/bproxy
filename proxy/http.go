@@ -454,6 +454,7 @@ func (p *HTTP) newMirrorJob(ctx *fasthttp.RequestCtx, pjob *proxyJob, uri *fasth
 	res := fasthttp.AcquireResponse()
 
 	ctx.Request.CopyTo(req)
+	req.SetTimeout(p.cfg.proxy.BackendTimeout)
 	req.SetURI(uri)
 	req.Header.Add("x-forwarded-for", ctx.RemoteIP().String())
 	req.Header.Add("x-forwarded-host", utils.Str(ctx.Host()))
@@ -486,9 +487,31 @@ func (p *HTTP) receive(ctx *fasthttp.RequestCtx) {
 			for host, uri := range p.peerURIs {
 				mj := p.newMirrorJob(ctx, pj, uri)
 				if pj.triage.Prioritise {
-					p.queueMirrorHi[host] <- mj
+					select {
+					case p.queueMirrorHi[host] <- mj:
+						// no-op
+					default:
+						// better not mirror than block on hot-path
+						metrics.MirrorDropCount.Add(context.TODO(), 1, otelapi.WithAttributes(
+							attribute.KeyValue{Key: "proxy", Value: attribute.StringValue(p.cfg.name)},
+							attribute.KeyValue{Key: "mirror_host", Value: attribute.StringValue(mj.host)},
+							attribute.KeyValue{Key: "jrpc_method", Value: attribute.StringValue(mj.jrpcMethodForMetrics)},
+						))
+						pj.log.Warn("Dropped mirrored high-prio call b/c the queue is full")
+					}
 				} else {
-					p.queueMirrorLo[host] <- mj
+					select {
+					case p.queueMirrorLo[host] <- mj:
+						// no-op
+					default:
+						// better not mirror than block on hot-path
+						metrics.MirrorDropCount.Add(context.TODO(), 1, otelapi.WithAttributes(
+							attribute.KeyValue{Key: "proxy", Value: attribute.StringValue(p.cfg.name)},
+							attribute.KeyValue{Key: "mirror_host", Value: attribute.StringValue(mj.host)},
+							attribute.KeyValue{Key: "jrpc_method", Value: attribute.StringValue(mj.jrpcMethodForMetrics)},
+						))
+						pj.log.Warn("Dropped mirrored low-prio call b/c the queue is full")
+					}
 				}
 			}
 		}

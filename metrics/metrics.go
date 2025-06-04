@@ -34,6 +34,7 @@ func Setup(
 		setupProxyFakeCount,
 		setupMirrorSuccessCount,
 		setupMirrorFailureCount,
+		setupMirrorDropCount,
 		setupFrontendConnectionsCount,
 		setupTLSValidNotAfter,
 		setupTLSValidNotBefore,
@@ -198,6 +199,17 @@ func setupMirrorFailureCount(ctx context.Context) error {
 		return err
 	}
 	MirrorFailureCount = m
+	return nil
+}
+
+func setupMirrorDropCount(ctx context.Context) error {
+	m, err := meter.Int64Counter("mirror_drop_count",
+		otelapi.WithDescription("count of dropped mirror requests"),
+	)
+	if err != nil {
+		return err
+	}
+	MirrorDropCount = m
 	return nil
 }
 
