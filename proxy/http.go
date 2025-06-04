@@ -331,7 +331,14 @@ func (p *HTTP) Observe(ctx context.Context, o otelapi.Observer) error {
 		return nil
 	}
 
+	p.mxConnections.Lock()
+	defer p.mxConnections.Unlock()
+
 	o.ObserveInt64(metrics.FrontendConnectionsCount, int64(p.frontend.GetOpenConnectionsCount()), otelapi.WithAttributes(
+		attribute.KeyValue{Key: "proxy", Value: attribute.StringValue(p.cfg.name)},
+	))
+
+	o.ObserveInt64(metrics.FrontendDrainingConnectionsCount, int64(len(p.drainingConnections)), otelapi.WithAttributes(
 		attribute.KeyValue{Key: "proxy", Value: attribute.StringValue(p.cfg.name)},
 	))
 
@@ -527,11 +534,9 @@ func (p *HTTP) receive(ctx *fasthttp.RequestCtx) {
 		p.mxConnections.Lock()
 		defer p.mxConnections.Unlock()
 
-		if conn, isDraining := p.drainingConnections[addr]; isDraining {
-			delete(p.drainingConnections, addr)
-			err := conn.Close()
-			pj.log.Info("Drained the upstream connection as finished handling a request",
-				zap.Error(err),
+		if _, isDraining := p.drainingConnections[addr]; isDraining {
+			ctx.SetConnectionClose()
+			pj.log.Info("Marked draining upstream connection to be closed",
 				zap.Int("remaining", len(p.drainingConnections)),
 			)
 		}

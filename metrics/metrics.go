@@ -36,6 +36,7 @@ func Setup(
 		setupMirrorFailureCount,
 		setupMirrorDropCount,
 		setupFrontendConnectionsCount,
+		setupFrontendDrainingConnectionsCount,
 		setupTLSValidNotAfter,
 		setupTLSValidNotBefore,
 		setupLateFCUCount,
@@ -47,6 +48,7 @@ func Setup(
 
 	if _, err := meter.RegisterCallback(observe,
 		FrontendConnectionsCount,
+		FrontendDrainingConnectionsCount,
 		TLSValidNotAfter,
 		TLSValidNotBefore,
 	); err != nil {
@@ -221,6 +223,17 @@ func setupFrontendConnectionsCount(ctx context.Context) error {
 		return err
 	}
 	FrontendConnectionsCount = m
+	return nil
+}
+
+func setupFrontendDrainingConnectionsCount(ctx context.Context) error {
+	m, err := meter.Int64ObservableGauge("frontend_draining_connections_count",
+		otelapi.WithDescription("count of draining frontend connections"),
+	)
+	if err != nil {
+		return err
+	}
+	FrontendDrainingConnectionsCount = m
 	return nil
 }
 

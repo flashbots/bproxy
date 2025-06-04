@@ -20,7 +20,8 @@ var (
 	MirrorFailureCount otelapi.Int64Counter
 	MirrorDropCount    otelapi.Int64Counter
 
-	FrontendConnectionsCount otelapi.Int64ObservableGauge
+	FrontendConnectionsCount         otelapi.Int64ObservableGauge
+	FrontendDrainingConnectionsCount otelapi.Int64ObservableGauge
 
 	TLSValidNotAfter  otelapi.Int64ObservableGauge
 	TLSValidNotBefore otelapi.Int64ObservableGauge
