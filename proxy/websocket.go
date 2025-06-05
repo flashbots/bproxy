@@ -156,8 +156,9 @@ func (p *Websocket) ResetConnections() {
 			err := ws.WriteMessage(websocket.CloseMessage,
 				websocket.FormatCloseMessage(websocket.CloseTryAgainLater, "unhealthy"),
 			)
-			p.logger.Error("Closed ws connection on request",
+			p.logger.Info("Closed ws connection on request",
 				zap.Error(err),
+				zap.String("remote_addr", addr),
 			)
 			delete(p.websockets, addr)
 		}
