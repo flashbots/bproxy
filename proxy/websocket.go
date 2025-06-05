@@ -43,6 +43,7 @@ type Websocket struct {
 	stop func()
 
 	connections   map[string]net.Conn
+	websockets    map[string]*websocket.Conn
 	mxConnections sync.Mutex
 }
 
@@ -53,6 +54,7 @@ func newWebsocket(cfg *websocketConfig) (*Websocket, error) {
 		cfg:         cfg,
 		logger:      l,
 		connections: make(map[string]net.Conn),
+		websockets:  map[string]*websocket.Conn{},
 
 		upgrader: &websocket.FastHTTPUpgrader{
 			ReadBufferSize:  cfg.proxy.ReadBufferSize * 1024 * 1024,
@@ -150,12 +152,22 @@ func (p *Websocket) ResetConnections() {
 	defer p.mxConnections.Unlock()
 
 	for addr, conn := range p.connections {
-		delete(p.connections, addr)
+		if ws, exists := p.websockets[addr]; exists {
+			err := ws.WriteMessage(websocket.CloseMessage,
+				websocket.FormatCloseMessage(websocket.CloseTryAgainLater, "unhealthy"),
+			)
+			p.logger.Error("Closed ws connection on request",
+				zap.Error(err),
+			)
+			delete(p.websockets, addr)
+		}
+
 		err := conn.Close()
 		p.logger.Info("Closed the connection on request",
 			zap.Error(err),
 			zap.String("remote_addr", addr),
 		)
+		delete(p.connections, addr)
 	}
 }
 
@@ -249,6 +261,10 @@ func (p *Websocket) receive(ctx *fasthttp.RequestCtx) {
 
 func (p *Websocket) websocket(frontend *websocket.Conn) {
 	defer frontend.Close()
+
+	p.mxConnections.Lock()
+	p.websockets[frontend.NetConn().RemoteAddr().String()] = frontend
+	p.mxConnections.Unlock()
 
 	l := p.logger.With(
 		zap.String("remote_addr", frontend.RemoteAddr().String()),
