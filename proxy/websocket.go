@@ -263,8 +263,8 @@ func (p *Websocket) websocket(frontend *websocket.Conn) {
 	defer backend.Close()
 
 	failure := make(chan error, 2)
-	go p.websocketPump(backend, frontend, ">", failure)
-	go p.websocketPump(frontend, backend, "<", failure)
+	go p.websocketPump(backend, frontend, "bld->rb", failure)
+	go p.websocketPump(frontend, backend, "rb->bld", failure)
 
 	err = <-failure
 	for err != nil { // exhaust errors

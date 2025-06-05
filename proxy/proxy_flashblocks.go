@@ -15,7 +15,7 @@ func NewFlashblocksProxy(
 	cfg *config.FlashblocksProxy,
 ) (*FlashblocksProxy, error) {
 	p, err := newWebsocket(&websocketConfig{
-		name:  "flashblocks-proxy",
+		name:  "bproxy-flashblocks",
 		proxy: cfg.WebsocketProxy,
 	})
 	if err != nil {
