@@ -432,6 +432,7 @@ func (p *HTTP) newProxyJob(ctx *fasthttp.RequestCtx) *proxyJob {
 			zap.Uint64("connection_id", ctx.ConnID()),
 			zap.Uint64("request_id", ctx.ConnRequestNum()),
 			zap.String("remote_addr", ctx.RemoteAddr().String()),
+			zap.String("user_agent", string(ctx.UserAgent())),
 			zap.String("downstream_host", utils.Str(p.backendURI.Host())),
 			zap.String("jrpc_method", job.triage.JrpcMethod),
 		)

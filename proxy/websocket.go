@@ -225,6 +225,7 @@ func (p *Websocket) receive(ctx *fasthttp.RequestCtx) {
 		zap.Uint64("connection_id", ctx.ConnID()),
 		zap.Uint64("request_id", ctx.ConnRequestNum()),
 		zap.String("remote_addr", ctx.RemoteAddr().String()),
+		zap.String("user_agent", string(ctx.UserAgent())),
 	)
 	defer l.Sync() //nolint:errcheck
 
