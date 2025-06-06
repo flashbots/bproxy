@@ -297,14 +297,16 @@ func (p *HTTP) Stop(ctx context.Context) error {
 		p.healthcheck.stop()
 	}
 
-	res := p.frontend.ShutdownWithContext(ctx)
+	err := p.frontend.ShutdownWithContext(ctx)
+
+	p.ResetConnections()
 
 	fasthttp.ReleaseURI(p.backendURI)
 	for _, uri := range p.peerURIs {
 		fasthttp.ReleaseURI(uri)
 	}
 
-	return res
+	return err
 }
 
 func (p *HTTP) ResetConnections() {

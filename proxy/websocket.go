@@ -206,9 +206,11 @@ func (p *Websocket) Stop(ctx context.Context) error {
 		p.healthcheck.stop()
 	}
 
-	res := p.frontend.ShutdownWithContext(ctx)
+	err := p.frontend.ShutdownWithContext(ctx)
 
-	return res
+	p.ResetConnections()
+
+	return err
 }
 
 func (p *Websocket) checkOrigin(ctx *fasthttp.RequestCtx) bool {
