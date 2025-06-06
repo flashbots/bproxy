@@ -66,6 +66,9 @@ func newHealthcheck(
 }
 
 func (h *healthcheck) IsHealthy() bool {
+	if h == nil {
+		return true
+	}
 	h.mx.Lock()
 	defer h.mx.Unlock()
 	return h.isHealthy

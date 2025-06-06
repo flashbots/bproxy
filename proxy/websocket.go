@@ -3,8 +3,6 @@ package proxy
 import (
 	"context"
 	"crypto/tls"
-	"encoding/json"
-	"fmt"
 	"net"
 	"net/http"
 	"strings"
@@ -14,7 +12,6 @@ import (
 	"github.com/flashbots/bproxy/config"
 	"github.com/flashbots/bproxy/logutils"
 	"github.com/flashbots/bproxy/metrics"
-	"github.com/flashbots/bproxy/utils"
 
 	"github.com/fasthttp/websocket"
 	"github.com/valyala/fasthttp"
@@ -43,7 +40,7 @@ type Websocket struct {
 	stop func()
 
 	connections   map[string]net.Conn
-	websockets    map[string]*websocket.Conn
+	pumps         map[string]*websocketPump
 	mxConnections sync.Mutex
 }
 
@@ -54,7 +51,7 @@ func newWebsocket(cfg *websocketConfig) (*Websocket, error) {
 		cfg:         cfg,
 		logger:      l,
 		connections: make(map[string]net.Conn),
-		websockets:  map[string]*websocket.Conn{},
+		pumps:       make(map[string]*websocketPump),
 
 		upgrader: &websocket.FastHTTPUpgrader{
 			ReadBufferSize:  cfg.proxy.ReadBufferSize * 1024 * 1024,
@@ -151,18 +148,16 @@ func (p *Websocket) ResetConnections() {
 	p.mxConnections.Lock()
 	defer p.mxConnections.Unlock()
 
-	for addr, conn := range p.connections {
-		if ws, exists := p.websockets[addr]; exists {
-			err := ws.WriteMessage(websocket.CloseMessage,
-				websocket.FormatCloseMessage(websocket.CloseTryAgainLater, "unhealthy"),
-			)
-			p.logger.Info("Closed ws connection on request",
-				zap.Error(err),
-				zap.String("remote_addr", addr),
-			)
-			delete(p.websockets, addr)
-		}
+	for addr, pump := range p.pumps {
+		err := pump.stop()
+		p.logger.Info("Closed ws connection on request",
+			zap.Error(err),
+			zap.String("remote_addr", addr),
+		)
+		delete(p.pumps, addr)
+	}
 
+	for addr, conn := range p.connections {
 		err := conn.Close()
 		p.logger.Info("Closed the connection on request",
 			zap.Error(err),
@@ -231,12 +226,14 @@ func (p *Websocket) receive(ctx *fasthttp.RequestCtx) {
 
 	if !p.healthcheck.IsHealthy() {
 		ctx.Error("unhealthy", fasthttp.StatusServiceUnavailable)
+		ctx.SetConnectionClose()
 		l.Warn("Refusing the connection b/c backend is (still) unhealthy")
 		return
 	}
 
 	if strings.ToLower(string(ctx.Request.Header.Peek("connection"))) != "upgrade" {
 		ctx.Response.SetStatusCode(fasthttp.StatusUpgradeRequired)
+		ctx.SetConnectionClose()
 		l.Warn("Non-websocket connection received",
 			zap.String("connection_header", string(ctx.Request.Header.Peek("connection"))),
 			zap.String("upgrade_header", string(ctx.Request.Header.Peek("Upgrade"))),
@@ -245,6 +242,7 @@ func (p *Websocket) receive(ctx *fasthttp.RequestCtx) {
 	}
 	if strings.ToLower(string(ctx.Request.Header.Peek("upgrade"))) != "websocket" {
 		ctx.Response.SetStatusCode(fasthttp.StatusNotImplemented)
+		ctx.SetConnectionClose()
 		l.Warn("Non-websocket connection received",
 			zap.String("connection_header", string(ctx.Request.Header.Peek("connection"))),
 			zap.String("upgrade_header", string(ctx.Request.Header.Peek("Upgrade"))),
@@ -254,6 +252,7 @@ func (p *Websocket) receive(ctx *fasthttp.RequestCtx) {
 
 	if err := p.upgrader.Upgrade(ctx, p.websocket); err != nil {
 		ctx.Response.SetStatusCode(fasthttp.StatusInternalServerError)
+		ctx.SetConnectionClose()
 		l.Error("Failed to upgrade to websocket",
 			zap.Error(err),
 		)
@@ -264,10 +263,6 @@ func (p *Websocket) receive(ctx *fasthttp.RequestCtx) {
 func (p *Websocket) websocket(frontend *websocket.Conn) {
 	defer frontend.Close()
 
-	p.mxConnections.Lock()
-	p.websockets[frontend.NetConn().RemoteAddr().String()] = frontend
-	p.mxConnections.Unlock()
-
 	l := p.logger.With(
 		zap.String("remote_addr", frontend.RemoteAddr().String()),
 	)
@@ -277,81 +272,27 @@ func (p *Websocket) websocket(frontend *websocket.Conn) {
 		l.Error("Failed to proxy the websocket stream",
 			zap.Error(err),
 		)
+		return
 	}
 	defer backend.Close()
 
-	failure := make(chan error, 2)
-	go p.websocketPump(backend, frontend, "bld->rb", failure)
-	go p.websocketPump(frontend, backend, "rb->bld", failure)
+	addr := frontend.NetConn().RemoteAddr().String()
+	pump := newWebsocketPump(p.cfg, frontend, backend, l)
 
-	err = <-failure
-	for err != nil { // exhaust errors
+	p.mxConnections.Lock()
+	p.pumps[addr] = pump
+	p.mxConnections.Unlock()
+
+	if err := pump.run(); err != nil {
 		metrics.ProxyFailureCount.Add(context.TODO(), 1, otelapi.WithAttributes(
 			attribute.KeyValue{Key: "proxy", Value: attribute.StringValue(p.cfg.name)},
 		))
 		l.Error("Websocket connection failed",
 			zap.Error(err),
 		)
-		select {
-		case err = <-failure:
-			// noop
-		default:
-			err = nil
-		}
-	}
-}
-
-func (p *Websocket) websocketPump(
-	from, to *websocket.Conn,
-	direction string,
-	failure chan<- error,
-) {
-	l := p.logger.With(
-		zap.String("from_addr", from.RemoteAddr().String()),
-		zap.String("to_addr", to.RemoteAddr().String()),
-		zap.String("direction", direction),
-	)
-
-	for {
-		msgType, bytes, err := from.ReadMessage()
-		if err != nil {
-			failure <- fmt.Errorf("read: %w", err)
-			return
-		}
-
-		ts := time.Now()
-
-		err = to.WriteMessage(msgType, bytes)
-		if err != nil {
-			failure <- fmt.Errorf("write: %w", err)
-			return
-		}
-
-		loggedFields := make([]zap.Field, 0, 6)
-		loggedFields = append(loggedFields,
-			zap.Time("ts_message_received", ts),
-			zap.Int("message_size", len(bytes)),
-		)
-
-		if p.cfg.proxy.LogMessages && len(bytes) <= p.cfg.proxy.LogMessagesMaxSize {
-			var jsonMessage interface{}
-			if err := json.Unmarshal(bytes, &jsonMessage); err == nil {
-				loggedFields = append(loggedFields,
-					zap.Any("json_message", jsonMessage),
-				)
-			} else {
-				loggedFields = append(loggedFields,
-					zap.NamedError("error_unmarshal", err),
-					zap.String("websocket_message", utils.Str(bytes)),
-				)
-			}
-		}
-
-		metrics.ProxySuccessCount.Add(context.TODO(), 1, otelapi.WithAttributes(
-			attribute.KeyValue{Key: "proxy", Value: attribute.StringValue(p.cfg.name)},
-			attribute.KeyValue{Key: "direction", Value: attribute.StringValue(direction)},
-		))
-		l.Info("Proxied message", loggedFields...)
+		p.mxConnections.Lock()
+		delete(p.pumps, addr)
+		p.mxConnections.Unlock()
 	}
 }
 
@@ -378,6 +319,7 @@ func (p *Websocket) upstreamConnectionChanged(conn net.Conn, state fasthttp.Conn
 
 	case fasthttp.StateHijacked:
 		l.Info("Upstream connection was hijacked")
+		delete(p.connections, addr)
 
 	case fasthttp.StateClosed:
 		l.Info("Upstream connection was closed")
