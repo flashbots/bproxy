@@ -331,7 +331,7 @@ func (p *Websocket) connectionsCount() int {
 	p.mxConnections.Lock()
 	defer p.mxConnections.Unlock()
 
-	return len(p.connections)
+	return len(p.connections) + len(p.pumps)
 }
 
 func (p *Websocket) backendUnhealthy(ctx context.Context) {
