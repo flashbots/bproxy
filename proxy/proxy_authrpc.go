@@ -120,8 +120,7 @@ func (p *AuthrpcProxy) triage(ctx *fasthttp.RequestCtx) (
 		zap.Uint64("request_id", ctx.ConnRequestNum()),
 	)
 
-	token := strings.TrimPrefix(utils.Str(ctx.Request.Header.Peek("authorization")), "Bearer ")
-	if iat != "" {
+	if token := strings.TrimPrefix(utils.Str(ctx.Request.Header.Peek("authorization")), "Bearer "); token != "" {
 		if iat, err := jwt.IssuedAt(token); err == nil {
 			metrics.LatencyAuthrpcJwt.Record(context.TODO(), int64(time.Since(iat).Milliseconds()))
 		} else {
