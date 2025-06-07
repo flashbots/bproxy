@@ -121,12 +121,14 @@ func (p *AuthrpcProxy) triage(ctx *fasthttp.RequestCtx) (
 	)
 
 	token := strings.TrimPrefix(utils.Str(ctx.Request.Header.Peek("authorization")), "Bearer ")
-	if iat, err := jwt.IssuedAt(token); err == nil {
-		metrics.LatencyAuthrpcJwt.Record(context.TODO(), int64(time.Since(iat).Milliseconds()))
-	} else {
-		l.Warn("Failed to parse iat claim from jwt",
-			zap.Error(err),
-		)
+	if iat != "" {
+		if iat, err := jwt.IssuedAt(token); err == nil {
+			metrics.LatencyAuthrpcJwt.Record(context.TODO(), int64(time.Since(iat).Milliseconds()))
+		} else {
+			l.Warn("Failed to parse iat claim from jwt",
+				zap.Error(err),
+			)
+		}
 	}
 
 	call, err := jrpc.Unmarshal(ctx.Request.Body())
