@@ -172,7 +172,7 @@ func (p *Websocket) Observe(ctx context.Context, o otelapi.Observer) error {
 		return nil
 	}
 
-	o.ObserveInt64(metrics.FrontendConnectionsCount, int64(p.frontend.GetOpenConnectionsCount()), otelapi.WithAttributes(
+	o.ObserveInt64(metrics.FrontendConnectionsCount, int64(p.connectionsCount()), otelapi.WithAttributes(
 		attribute.KeyValue{Key: "proxy", Value: attribute.StringValue(p.cfg.name)},
 	))
 
