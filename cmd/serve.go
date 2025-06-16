@@ -344,7 +344,7 @@ func CommandServe(cfg *config.Config) *cli.Command {
 
 		&cli.DurationFlag{ // --flashblocks-control-timeout
 			Category:    strings.ToUpper(categoryFlashblocks),
-			Destination: &cfg.Flashblocks.BackwardTimeout,
+			Destination: &cfg.Flashblocks.ControlTimeout,
 			EnvVars:     []string{envPrefix + strings.ToUpper(categoryFlashblocks) + "_CONTROL_TIMEOUT"},
 			Name:        categoryFlashblocks + "-control-timeout",
 			Usage:       "max `duration` for control websocket messages reads and writes (0s means no timeout)",
