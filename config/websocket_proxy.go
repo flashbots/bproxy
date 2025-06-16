@@ -8,21 +8,23 @@ import (
 	"net"
 	"net/url"
 	"os"
+	"time"
 
 	"github.com/flashbots/bproxy/utils"
 )
 
 type WebsocketProxy struct {
-	BackendURL         string       `yaml:"backend_url"`
-	Enabled            bool         `yaml:"enabled"`
-	Healthcheck        *Healthcheck `yaml:"healthcheck"`
-	ListenAddress      string       `yaml:"listen_address"`
-	LogMessages        bool         `yaml:"log_messages"`
-	LogMessagesMaxSize int          `yaml:"log_messages_max_size"`
-	ReadBufferSize     int          `yaml:"read_buffer_size_mb"`
-	TLSCertificate     string       `yaml:"tls_crt"`
-	TLSKey             string       `yaml:"tls_key"`
-	WriteBufferSize    int          `yaml:"write_buffer_size_mb"`
+	BackendURL         string        `yaml:"backend_url"`
+	Enabled            bool          `yaml:"enabled"`
+	Healthcheck        *Healthcheck  `yaml:"healthcheck"`
+	ListenAddress      string        `yaml:"listen_address"`
+	LogMessages        bool          `yaml:"log_messages"`
+	LogMessagesMaxSize int           `yaml:"log_messages_max_size"`
+	ReadBufferSize     int           `yaml:"read_buffer_size_mb"`
+	Timeout            time.Duration `yaml:"backend_timeout"`
+	TLSCertificate     string        `yaml:"tls_crt"`
+	TLSKey             string        `yaml:"tls_key"`
+	WriteBufferSize    int           `yaml:"write_buffer_size_mb"`
 }
 
 var (

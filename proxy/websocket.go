@@ -3,6 +3,7 @@ package proxy
 import (
 	"context"
 	"crypto/tls"
+	"errors"
 	"net"
 	"net/http"
 	"strings"
@@ -285,17 +286,21 @@ func (p *Websocket) websocket(frontend *websocket.Conn) {
 	p.pumps[addr] = pump
 	p.mxConnections.Unlock()
 
-	if err := pump.run(); err != nil {
+	reason := pump.run()
+	if reason != nil {
 		metrics.ProxyFailureCount.Add(context.TODO(), 1, otelapi.WithAttributes(
 			attribute.KeyValue{Key: "proxy", Value: attribute.StringValue(p.cfg.name)},
 		))
 		l.Error("Websocket connection failed",
-			zap.Error(err),
+			zap.Error(reason),
 		)
-		p.mxConnections.Lock()
-		delete(p.pumps, addr)
-		p.mxConnections.Unlock()
 	}
+	_ = p.closeWebsocket(pump.backend, reason)
+	_ = p.closeWebsocket(pump.frontend, reason)
+
+	p.mxConnections.Lock()
+	delete(p.pumps, addr)
+	p.mxConnections.Unlock()
 }
 
 func (p *Websocket) upstreamConnectionChanged(conn net.Conn, state fasthttp.ConnState) {
@@ -350,4 +355,22 @@ func (p *Websocket) backendUnhealthy(ctx context.Context) {
 		)
 		p.ResetConnections()
 	}
+}
+
+func (p *Websocket) closeWebsocket(conn *websocket.Conn, reason error) error {
+	if reason == nil {
+		return errors.Join(
+			conn.WriteControl(
+				websocket.CloseMessage, nil, time.Now().Add(p.cfg.proxy.Timeout),
+			),
+			conn.Close(),
+		)
+	}
+
+	return errors.Join(
+		conn.WriteControl(
+			websocket.CloseMessage, []byte(reason.Error()), time.Now().Add(p.cfg.proxy.Timeout),
+		),
+		conn.Close(),
+	)
 }

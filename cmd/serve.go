@@ -415,6 +415,15 @@ func CommandServe(cfg *config.Config) *cli.Command {
 			Value:       16,
 		},
 
+		&cli.DurationFlag{ // --flashblocks-timeout
+			Category:    strings.ToUpper(categoryFlashblocks),
+			Destination: &cfg.Flashblocks.Timeout,
+			EnvVars:     []string{envPrefix + strings.ToUpper(categoryFlashblocks) + "_TIMEOUT"},
+			Name:        categoryFlashblocks + "-timeout",
+			Usage:       "max `duration` for flashblocks websocket reads or writes",
+			Value:       5 * time.Second,
+		},
+
 		&cli.StringFlag{ // --flashblocks-tls-crt
 			Category:    strings.ToUpper(categoryFlashblocks),
 			Destination: &cfg.Flashblocks.TLSCertificate,

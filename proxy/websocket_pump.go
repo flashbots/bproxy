@@ -2,6 +2,7 @@ package proxy
 
 import (
 	"context"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"sync/atomic"
@@ -42,9 +43,19 @@ func newWebsocketPump(
 
 func (w *websocketPump) run() error {
 	failure := make(chan error, 2)
-	done := make(chan struct{}, 1)
+	done := make(chan struct{}, 2)
 
-	go w.pump(w.backend, w.frontend, "b->f", done, failure)
+	w.frontend.SetPingHandler(w.pumpPings(w.frontend, w.backend, "f->b"))
+	w.backend.SetPongHandler(w.pumpPongs(w.backend, w.frontend, "b->f"))
+
+	w.backend.SetPingHandler(w.pumpPings(w.backend, w.frontend, "b->f"))
+	w.frontend.SetPongHandler(w.pumpPongs(w.frontend, w.backend, "f->b"))
+
+	w.frontend.SetCloseHandler(w.pumpCloseMessages(w.frontend, w.backend, "f->b"))
+	w.backend.SetCloseHandler(w.pumpCloseMessages(w.backend, w.frontend, "b->f"))
+
+	go w.pumpMessages(w.backend, w.frontend, "b->f", done, failure)
+	go w.pumpMessages(w.frontend, w.backend, "f->b", done, failure)
 
 	w.active.Store(true)
 
@@ -86,7 +97,7 @@ func (w *websocketPump) stop() error {
 	return utils.FlattenErrors(errs)
 }
 
-func (w *websocketPump) pump(
+func (w *websocketPump) pumpMessages(
 	from, to *websocket.Conn,
 	direction string,
 	done chan struct{},
@@ -105,7 +116,7 @@ loop:
 			return
 
 		default:
-			if err := from.SetReadDeadline(time.Now().Add(5 * time.Second)); err != nil {
+			if err := from.SetReadDeadline(time.Now().Add(w.cfg.proxy.Timeout)); err != nil {
 				failure <- err
 				continue loop
 			}
@@ -117,7 +128,7 @@ loop:
 
 			ts := time.Now()
 
-			if err := to.SetWriteDeadline(time.Now().Add(5 * time.Second)); err != nil {
+			if err := to.SetWriteDeadline(time.Now().Add(w.cfg.proxy.Timeout)); err != nil {
 				failure <- err
 				continue loop
 			}
@@ -130,6 +141,7 @@ loop:
 			loggedFields := make([]zap.Field, 0, 6)
 			loggedFields = append(loggedFields,
 				zap.Time("ts_message_received", ts),
+				zap.Int("message_type", msgType),
 				zap.Int("message_size", len(bytes)),
 			)
 
@@ -153,5 +165,63 @@ loop:
 			))
 			l.Info("Proxied message", loggedFields...)
 		}
+	}
+}
+
+func (w *websocketPump) pumpPings(
+	from, to *websocket.Conn,
+	direction string,
+) func(message string) error {
+	l := w.logger.With(
+		zap.String("from_addr", from.RemoteAddr().String()),
+		zap.String("to_addr", to.RemoteAddr().String()),
+		zap.String("direction", direction),
+	)
+	return func(message string) error {
+		l.Debug("Passing ping through...",
+			zap.String("message", hex.EncodeToString([]byte(message))),
+		)
+		return to.WriteControl(
+			websocket.PingMessage, []byte(message), time.Now().Add(w.cfg.proxy.Timeout),
+		)
+	}
+}
+
+func (w *websocketPump) pumpPongs(
+	from, to *websocket.Conn,
+	direction string,
+) func(message string) error {
+	l := w.logger.With(
+		zap.String("from_addr", from.RemoteAddr().String()),
+		zap.String("to_addr", to.RemoteAddr().String()),
+		zap.String("direction", direction),
+	)
+	return func(message string) error {
+		l.Debug("Passing pong through...",
+			zap.String("message", hex.EncodeToString([]byte(message))),
+		)
+		return to.WriteControl(
+			websocket.PongMessage, []byte(message), time.Now().Add(w.cfg.proxy.Timeout),
+		)
+	}
+}
+
+func (w *websocketPump) pumpCloseMessages(
+	from, to *websocket.Conn,
+	direction string,
+) func(code int, message string) error {
+	l := w.logger.With(
+		zap.String("from_addr", from.RemoteAddr().String()),
+		zap.String("to_addr", to.RemoteAddr().String()),
+		zap.String("direction", direction),
+	)
+	return func(code int, message string) error {
+		l.Info("Passing close message through...",
+			zap.Int("code", code),
+			zap.String("message", hex.EncodeToString([]byte(message))),
+		)
+		return to.WriteControl(
+			code, []byte(message), time.Now().Add(w.cfg.proxy.Timeout),
+		)
 	}
 }
