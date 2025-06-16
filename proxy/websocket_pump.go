@@ -65,7 +65,22 @@ func (w *websocketPump) run() error {
 			done <- struct{}{}
 			w.active.Store(false)
 			return nil
+
 		case err := <-failure:
+			errs := make([]error, 0, 2)
+			errs = append(errs, err)
+
+		exhaustErrs:
+			for {
+				select {
+				case err := <-failure:
+					errs = append(errs, err)
+				default:
+					break exhaustErrs
+				}
+			}
+			err = utils.FlattenErrors(errs)
+
 			done <- struct{}{}
 			w.active.Store(false)
 			return err

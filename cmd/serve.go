@@ -348,7 +348,7 @@ func CommandServe(cfg *config.Config) *cli.Command {
 			EnvVars:     []string{envPrefix + strings.ToUpper(categoryFlashblocks) + "_CONTROL_TIMEOUT"},
 			Name:        categoryFlashblocks + "-control-timeout",
 			Usage:       "max `duration` for control websocket messages reads and writes (0s means no timeout)",
-			Value:       time.Second,
+			Value:       2 * time.Second,
 		},
 
 		&cli.BoolFlag{ // --flashblocks-enabled

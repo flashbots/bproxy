@@ -254,7 +254,7 @@ func (p *Websocket) receive(ctx *fasthttp.RequestCtx) {
 		return
 	}
 
-	if err := p.upgrader.Upgrade(ctx, p.websocket); err != nil {
+	if err := p.upgrader.Upgrade(ctx, p.websocket(ctx)); err != nil {
 		ctx.Response.SetStatusCode(fasthttp.StatusInternalServerError)
 		ctx.SetConnectionClose()
 		l.Error("Failed to upgrade to websocket",
@@ -264,44 +264,55 @@ func (p *Websocket) receive(ctx *fasthttp.RequestCtx) {
 	}
 }
 
-func (p *Websocket) websocket(frontend *websocket.Conn) {
-	defer frontend.Close()
+func (p *Websocket) websocket(ctx *fasthttp.RequestCtx) func(frontend *websocket.Conn) {
+	return func(frontend *websocket.Conn) {
+		defer frontend.Close()
 
-	l := p.logger.With(
-		zap.String("remote_addr", frontend.RemoteAddr().String()),
-	)
+		l := p.logger.With(
+			zap.String("remote_addr", frontend.RemoteAddr().String()),
+			zap.Uint64("connection_id", ctx.ConnID()),
+		)
 
-	backend, _, err := p.backend.Dial(p.cfg.proxy.BackendURL, nil)
-	if err != nil {
-		l.Error("Failed to proxy the websocket stream",
+		backend, _, err := p.backend.Dial(p.cfg.proxy.BackendURL, nil)
+		if err != nil {
+			l.Error("Failed to proxy the websocket stream",
+				zap.Error(err),
+			)
+			return
+		}
+		defer backend.Close()
+
+		addr := frontend.NetConn().RemoteAddr().String()
+		pump := newWebsocketPump(p.cfg, frontend, backend, l)
+
+		p.mxConnections.Lock()
+		p.pumps[addr] = pump
+		p.mxConnections.Unlock()
+
+		reason := pump.run()
+		if reason != nil {
+			metrics.ProxyFailureCount.Add(context.TODO(), 1, otelapi.WithAttributes(
+				attribute.KeyValue{Key: "proxy", Value: attribute.StringValue(p.cfg.name)},
+			))
+			l.Error("Websocket connection failed",
+				zap.Error(reason),
+			)
+		}
+
+		err = p.closeWebsocket(pump.backend, reason)
+		l.Info("Closed backend connection",
 			zap.Error(err),
 		)
-		return
-	}
-	defer backend.Close()
 
-	addr := frontend.NetConn().RemoteAddr().String()
-	pump := newWebsocketPump(p.cfg, frontend, backend, l)
-
-	p.mxConnections.Lock()
-	p.pumps[addr] = pump
-	p.mxConnections.Unlock()
-
-	reason := pump.run()
-	if reason != nil {
-		metrics.ProxyFailureCount.Add(context.TODO(), 1, otelapi.WithAttributes(
-			attribute.KeyValue{Key: "proxy", Value: attribute.StringValue(p.cfg.name)},
-		))
-		l.Error("Websocket connection failed",
-			zap.Error(reason),
+		err = p.closeWebsocket(pump.frontend, reason)
+		l.Info("Closed frontend connection",
+			zap.Error(err),
 		)
-	}
-	_ = p.closeWebsocket(pump.backend, reason)
-	_ = p.closeWebsocket(pump.frontend, reason)
 
-	p.mxConnections.Lock()
-	delete(p.pumps, addr)
-	p.mxConnections.Unlock()
+		p.mxConnections.Lock()
+		delete(p.pumps, addr)
+		p.mxConnections.Unlock()
+	}
 }
 
 func (p *Websocket) upstreamConnectionChanged(conn net.Conn, state fasthttp.ConnState) {
