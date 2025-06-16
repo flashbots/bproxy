@@ -25,9 +25,9 @@ type Server struct {
 	failure chan error
 	logger  *zap.Logger
 
-	authrpc     *proxy.AuthrpcProxy
-	flashblocks *proxy.FlashblocksProxy
-	rpc         *proxy.RpcProxy
+	authrpc     *proxy.Authrpc
+	flashblocks *proxy.Flashblocks
+	rpc         *proxy.Rpc
 
 	metrics *http.Server
 }
@@ -39,24 +39,24 @@ func New(cfg *config.Config) (*Server, error) {
 		failure: make(chan error, 16),
 	}
 
-	if cfg.AuthrpcProxy.Enabled {
-		authrpc, err := proxy.NewAuthrpcProxy(s.cfg.AuthrpcProxy, s.cfg.Chaos)
+	if cfg.Authrpc.Enabled {
+		authrpc, err := proxy.NewAuthrpc(s.cfg.Authrpc, s.cfg.Chaos)
 		if err != nil {
 			return nil, err
 		}
 		s.authrpc = authrpc
 	}
 
-	if cfg.FlashblocksProxy.Enabled {
-		flashblocks, err := proxy.NewFlashblocksProxy(s.cfg.FlashblocksProxy)
+	if cfg.Flashblocks.Enabled {
+		flashblocks, err := proxy.NewFlashblocks(s.cfg.Flashblocks)
 		if err != nil {
 			return nil, err
 		}
 		s.flashblocks = flashblocks
 	}
 
-	if cfg.RpcProxy.Enabled {
-		rpc, err := proxy.NewRpcProxy(s.cfg.RpcProxy, s.cfg.Chaos)
+	if cfg.Rpc.Enabled {
+		rpc, err := proxy.NewRpc(s.cfg.Rpc, s.cfg.Chaos)
 		if err != nil {
 			return nil, err
 		}

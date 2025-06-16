@@ -21,24 +21,24 @@ import (
 	"go.uber.org/zap"
 )
 
-type authrpcProxyConfig struct {
-	deduplicateFCUs bool
-}
-
-type AuthrpcProxy struct {
+type Authrpc struct {
 	proxy *HTTP
 
-	cfg *authrpcProxyConfig
+	cfg *authrpcConfig
 
 	seenHeads       map[string]time.Time
 	mxSeenHeads     sync.Mutex
 	tickerSeenHeads *time.Ticker
 }
 
-func NewAuthrpcProxy(
-	cfg *config.AuthrpcProxy,
+type authrpcConfig struct {
+	deduplicateFCUs bool
+}
+
+func NewAuthrpc(
+	cfg *config.Authrpc,
 	chaos *config.Chaos,
-) (*AuthrpcProxy, error) {
+) (*Authrpc, error) {
 	p, err := newHTTP(&httpConfig{
 		name:  "bproxy-authrpc",
 		proxy: cfg.HttpProxy,
@@ -48,13 +48,13 @@ func NewAuthrpcProxy(
 		return nil, err
 	}
 
-	ap := &AuthrpcProxy{
+	ap := &Authrpc{
 		proxy: p,
 
 		seenHeads:       make(map[string]time.Time, 60),
 		tickerSeenHeads: time.NewTicker(30 * time.Second),
 
-		cfg: &authrpcProxyConfig{
+		cfg: &authrpcConfig{
 			deduplicateFCUs: cfg.DeduplicateFCUs,
 		},
 	}
@@ -65,35 +65,35 @@ func NewAuthrpcProxy(
 	return ap, nil
 }
 
-func (p *AuthrpcProxy) Run(ctx context.Context, failure chan<- error) {
+func (p *Authrpc) Run(ctx context.Context, failure chan<- error) {
 	if p == nil {
 		return
 	}
 	p.proxy.Run(ctx, failure)
 }
 
-func (p *AuthrpcProxy) ResetConnections() {
+func (p *Authrpc) ResetConnections() {
 	if p == nil {
 		return
 	}
 	p.proxy.ResetConnections()
 }
 
-func (p *AuthrpcProxy) Stop(ctx context.Context) error {
+func (p *Authrpc) Stop(ctx context.Context) error {
 	if p == nil {
 		return nil
 	}
 	return p.proxy.Stop(ctx)
 }
 
-func (p *AuthrpcProxy) Observe(ctx context.Context, o otelapi.Observer) error {
+func (p *Authrpc) Observe(ctx context.Context, o otelapi.Observer) error {
 	if p == nil {
 		return nil
 	}
 	return p.proxy.Observe(ctx, o)
 }
 
-func (p *AuthrpcProxy) run() {
+func (p *Authrpc) run() {
 	go func() {
 		for {
 			<-p.tickerSeenHeads.C
@@ -108,11 +108,11 @@ func (p *AuthrpcProxy) run() {
 	}()
 }
 
-func (p *AuthrpcProxy) stop() {
+func (p *Authrpc) stop() {
 	p.tickerSeenHeads.Stop()
 }
 
-func (p *AuthrpcProxy) triage(ctx *fasthttp.RequestCtx) (
+func (p *Authrpc) triage(ctx *fasthttp.RequestCtx) (
 	triage *triaged.Request, res *fasthttp.Response,
 ) {
 	l := p.proxy.logger.With(
@@ -275,7 +275,7 @@ func (p *AuthrpcProxy) triage(ctx *fasthttp.RequestCtx) (
 	}
 }
 
-func (p *AuthrpcProxy) alreadySeen(headBlockHash, safeBlockHash, finalisedBlockHash string) bool {
+func (p *Authrpc) alreadySeen(headBlockHash, safeBlockHash, finalisedBlockHash string) bool {
 	p.mxSeenHeads.Lock()
 	defer p.mxSeenHeads.Unlock()
 
@@ -290,7 +290,7 @@ func (p *AuthrpcProxy) alreadySeen(headBlockHash, safeBlockHash, finalisedBlockH
 	return false
 }
 
-func (p *AuthrpcProxy) interceptEngineForkchoiceUpdatedV3(call jrpc.Call, head string) *fasthttp.Response {
+func (p *Authrpc) interceptEngineForkchoiceUpdatedV3(call jrpc.Call, head string) *fasthttp.Response {
 	res := fasthttp.AcquireResponse()
 
 	res.SetStatusCode(fasthttp.StatusOK)

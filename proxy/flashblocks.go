@@ -7,13 +7,13 @@ import (
 	otelapi "go.opentelemetry.io/otel/metric"
 )
 
-type FlashblocksProxy struct {
+type Flashblocks struct {
 	proxy *Websocket
 }
 
-func NewFlashblocksProxy(
-	cfg *config.FlashblocksProxy,
-) (*FlashblocksProxy, error) {
+func NewFlashblocks(
+	cfg *config.Flashblocks,
+) (*Flashblocks, error) {
 	p, err := newWebsocket(&websocketConfig{
 		name:  "bproxy-flashblocks",
 		proxy: cfg.WebsocketProxy,
@@ -22,35 +22,35 @@ func NewFlashblocksProxy(
 		return nil, err
 	}
 
-	flashblocksProxy := &FlashblocksProxy{
+	flashblocks := &Flashblocks{
 		proxy: p,
 	}
 
-	return flashblocksProxy, nil
+	return flashblocks, nil
 }
 
-func (p *FlashblocksProxy) Run(ctx context.Context, failure chan<- error) {
+func (p *Flashblocks) Run(ctx context.Context, failure chan<- error) {
 	if p == nil {
 		return
 	}
 	p.proxy.Run(ctx, failure)
 }
 
-func (p *FlashblocksProxy) ResetConnections() {
+func (p *Flashblocks) ResetConnections() {
 	if p == nil {
 		return
 	}
 	p.proxy.ResetConnections()
 }
 
-func (p *FlashblocksProxy) Observe(ctx context.Context, o otelapi.Observer) error {
+func (p *Flashblocks) Observe(ctx context.Context, o otelapi.Observer) error {
 	if p == nil {
 		return nil
 	}
 	return p.proxy.Observe(ctx, o)
 }
 
-func (p *FlashblocksProxy) Stop(ctx context.Context) error {
+func (p *Flashblocks) Stop(ctx context.Context) error {
 	if p == nil {
 		return nil
 	}

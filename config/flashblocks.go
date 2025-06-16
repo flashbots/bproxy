@@ -1,5 +1,5 @@
 package config
 
-type FlashblocksProxy struct {
+type Flashblocks struct {
 	*WebsocketProxy `yaml:"proxy"`
 }

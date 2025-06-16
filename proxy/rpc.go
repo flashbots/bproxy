@@ -23,14 +23,14 @@ import (
 	"go.uber.org/zap"
 )
 
-type RpcProxy struct {
+type Rpc struct {
 	proxy *HTTP
 }
 
-func NewRpcProxy(
-	cfg *config.RpcProxy,
+func NewRpc(
+	cfg *config.Rpc,
 	chaos *config.Chaos,
-) (*RpcProxy, error) {
+) (*Rpc, error) {
 	p, err := newHTTP(&httpConfig{
 		name:  "bproxy-rpc",
 		proxy: cfg.HttpProxy,
@@ -40,44 +40,44 @@ func NewRpcProxy(
 		return nil, err
 	}
 
-	rpcProxy := &RpcProxy{
+	rpc := &Rpc{
 		proxy: p,
 	}
 
-	rpcProxy.proxy.triage = rpcProxy.triage
+	rpc.proxy.triage = rpc.triage
 
-	return rpcProxy, nil
+	return rpc, nil
 }
 
-func (p *RpcProxy) Run(ctx context.Context, failure chan<- error) {
+func (p *Rpc) Run(ctx context.Context, failure chan<- error) {
 	if p == nil {
 		return
 	}
 	p.proxy.Run(ctx, failure)
 }
 
-func (p *RpcProxy) ResetConnections() {
+func (p *Rpc) ResetConnections() {
 	if p == nil {
 		return
 	}
 	p.proxy.ResetConnections()
 }
 
-func (p *RpcProxy) Stop(ctx context.Context) error {
+func (p *Rpc) Stop(ctx context.Context) error {
 	if p == nil {
 		return nil
 	}
 	return p.proxy.Stop(ctx)
 }
 
-func (p *RpcProxy) Observe(ctx context.Context, o otelapi.Observer) error {
+func (p *Rpc) Observe(ctx context.Context, o otelapi.Observer) error {
 	if p == nil {
 		return nil
 	}
 	return p.proxy.Observe(ctx, o)
 }
 
-func (p *RpcProxy) triage(ctx *fasthttp.RequestCtx) (*triaged.Request, *fasthttp.Response) {
+func (p *Rpc) triage(ctx *fasthttp.RequestCtx) (*triaged.Request, *fasthttp.Response) {
 	l := p.proxy.logger.With(
 		zap.Uint64("connection_id", ctx.ConnID()),
 		zap.Uint64("request_id", ctx.ConnRequestNum()),
@@ -104,7 +104,7 @@ func (p *RpcProxy) triage(ctx *fasthttp.RequestCtx) (*triaged.Request, *fasthttp
 	}, fasthttp.AcquireResponse()
 }
 
-func (p *RpcProxy) triageSingle(call jrpc.Call, l *zap.Logger) (*triaged.Request, *fasthttp.Response) {
+func (p *Rpc) triageSingle(call jrpc.Call, l *zap.Logger) (*triaged.Request, *fasthttp.Response) {
 	switch {
 	case call.GetMethod() == "tee_getDcapQuote":
 		return &triaged.Request{
@@ -155,7 +155,7 @@ func (p *RpcProxy) triageSingle(call jrpc.Call, l *zap.Logger) (*triaged.Request
 	}
 }
 
-func (p *RpcProxy) triageBatch(batch []jrpc.Call, l *zap.Logger) (*triaged.Request, *fasthttp.Response) {
+func (p *Rpc) triageBatch(batch []jrpc.Call, l *zap.Logger) (*triaged.Request, *fasthttp.Response) {
 	if len(batch) == 0 {
 		// no need to proxy empty batches
 		return &triaged.Request{}, fasthttp.AcquireResponse()
@@ -219,7 +219,7 @@ func (p *RpcProxy) triageBatch(batch []jrpc.Call, l *zap.Logger) (*triaged.Reque
 	}
 }
 
-func (p *RpcProxy) interceptTeeGetDcapQuote(call jrpc.Call) *fasthttp.Response {
+func (p *Rpc) interceptTeeGetDcapQuote(call jrpc.Call) *fasthttp.Response {
 	res := fasthttp.AcquireResponse()
 
 	res.SetStatusCode(fasthttp.StatusOK)

@@ -20,12 +20,6 @@ import (
 	"go.uber.org/zap"
 )
 
-type websocketConfig struct {
-	name string
-
-	proxy *config.WebsocketProxy
-}
-
 type Websocket struct {
 	cfg *websocketConfig
 
@@ -42,6 +36,12 @@ type Websocket struct {
 	connections   map[string]net.Conn
 	pumps         map[string]*websocketPump
 	mxConnections sync.Mutex
+}
+
+type websocketConfig struct {
+	name string
+
+	proxy *config.WebsocketProxy
 }
 
 func newWebsocket(cfg *websocketConfig) (*Websocket, error) {

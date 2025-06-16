@@ -255,13 +255,13 @@ func CommandServe(cfg *config.Config) *cli.Command {
 	}
 
 	authrpcFlags, extraMirroredJrpcMethodsAuthRPC, peerURLsAuthRPC := makeProxyFlags(
-		cfg.AuthrpcProxy.HttpProxy, categoryAuthrpc, "http://127.0.0.1:18551", "0.0.0.0:8551",
+		cfg.Authrpc.HttpProxy, categoryAuthrpc, "http://127.0.0.1:18551", "0.0.0.0:8551",
 	)
 
 	authrpcFlags = append(authrpcFlags, // --authrpc-xxx
 		&cli.BoolFlag{ // --authrpc-deduplicate-fcus
 			Category:    strings.ToUpper(categoryAuthrpc),
-			Destination: &cfg.AuthrpcProxy.DeduplicateFCUs,
+			Destination: &cfg.Authrpc.DeduplicateFCUs,
 			EnvVars:     []string{envPrefix + strings.ToUpper(categoryAuthrpc) + "_DEDUPLICATE_FCUS"},
 			Name:        categoryAuthrpc + "-deduplicate-fcus",
 			Usage:       "deduplicate repetitive fcu messages",
@@ -326,7 +326,7 @@ func CommandServe(cfg *config.Config) *cli.Command {
 	flashblocksFlags := []cli.Flag{ // --flashblocks-xxx
 		&cli.StringFlag{ // --flashblocks-backend
 			Category:    strings.ToUpper(categoryFlashblocks),
-			Destination: &cfg.FlashblocksProxy.BackendURL,
+			Destination: &cfg.Flashblocks.BackendURL,
 			EnvVars:     []string{envPrefix + strings.ToUpper(categoryFlashblocks) + "_BACKEND"},
 			Name:        categoryFlashblocks + "-backend",
 			Usage:       "`url` of flashblocks backend",
@@ -335,7 +335,7 @@ func CommandServe(cfg *config.Config) *cli.Command {
 
 		&cli.BoolFlag{ // --flashblocks-enabled
 			Category:    strings.ToUpper(categoryFlashblocks),
-			Destination: &cfg.FlashblocksProxy.Enabled,
+			Destination: &cfg.Flashblocks.Enabled,
 			EnvVars:     []string{envPrefix + strings.ToUpper(categoryFlashblocks) + "_ENABLED"},
 			Name:        categoryFlashblocks + "-enabled",
 			Usage:       "enable flashblocks proxy",
@@ -345,7 +345,7 @@ func CommandServe(cfg *config.Config) *cli.Command {
 		&cli.StringFlag{ // --flashblocks-healthcheck
 			Category:    strings.ToUpper(categoryFlashblocks),
 			DefaultText: "disabled",
-			Destination: &cfg.FlashblocksProxy.Healthcheck.URL,
+			Destination: &cfg.Flashblocks.Healthcheck.URL,
 			EnvVars:     []string{envPrefix + strings.ToUpper(categoryFlashblocks) + "_HEALTHCHECK"},
 			Name:        categoryFlashblocks + "-healthcheck",
 			Usage:       "`url` of flashblocks backend healthcheck endpoint",
@@ -354,7 +354,7 @@ func CommandServe(cfg *config.Config) *cli.Command {
 
 		&cli.DurationFlag{ // --flashblocks-healthcheck-interval
 			Category:    strings.ToUpper(categoryFlashblocks),
-			Destination: &cfg.FlashblocksProxy.Healthcheck.Interval,
+			Destination: &cfg.Flashblocks.Healthcheck.Interval,
 			EnvVars:     []string{envPrefix + strings.ToUpper(categoryFlashblocks) + "_HEALTHCHECK_INTERVAL"},
 			Name:        categoryFlashblocks + "-healthcheck-interval",
 			Usage:       "`interval` between consecutive flashblocks backend healthchecks",
@@ -363,7 +363,7 @@ func CommandServe(cfg *config.Config) *cli.Command {
 
 		&cli.IntFlag{ // --flashblocks-healthcheck-threshold-healthy
 			Category:    strings.ToUpper(categoryFlashblocks),
-			Destination: &cfg.FlashblocksProxy.Healthcheck.ThresholdHealthy,
+			Destination: &cfg.Flashblocks.Healthcheck.ThresholdHealthy,
 			EnvVars:     []string{envPrefix + strings.ToUpper(categoryFlashblocks) + "_HEALTHCHECK_THRESHOLD_HEALTHY"},
 			Name:        categoryFlashblocks + "-healthcheck-threshold-healthy",
 			Usage:       "`count` of consecutive successful healthchecks to consider flashblocks backend to be healthy",
@@ -372,7 +372,7 @@ func CommandServe(cfg *config.Config) *cli.Command {
 
 		&cli.IntFlag{ // --flashblocks-healthcheck-threshold-unhealthy
 			Category:    strings.ToUpper(categoryFlashblocks),
-			Destination: &cfg.FlashblocksProxy.Healthcheck.ThresholdUnhealthy,
+			Destination: &cfg.Flashblocks.Healthcheck.ThresholdUnhealthy,
 			EnvVars:     []string{envPrefix + strings.ToUpper(categoryFlashblocks) + "_HEALTHCHECK_THRESHOLD_UNHEALTHY"},
 			Name:        categoryFlashblocks + "-healthcheck-threshold-unhealthy",
 			Usage:       "`count` of consecutive failed healthchecks to consider flashblocks backend to be unhealthy",
@@ -381,7 +381,7 @@ func CommandServe(cfg *config.Config) *cli.Command {
 
 		&cli.StringFlag{ // --flashblocks-listen-address
 			Category:    strings.ToUpper(categoryFlashblocks),
-			Destination: &cfg.FlashblocksProxy.ListenAddress,
+			Destination: &cfg.Flashblocks.ListenAddress,
 			EnvVars:     []string{envPrefix + strings.ToUpper(categoryFlashblocks) + "_LISTEN_ADDRESS"},
 			Name:        categoryFlashblocks + "-listen-address",
 			Usage:       "`host:port` for flashblocks proxy",
@@ -390,7 +390,7 @@ func CommandServe(cfg *config.Config) *cli.Command {
 
 		&cli.BoolFlag{ // --flashblocks-log-messages
 			Category:    strings.ToUpper(categoryFlashblocks),
-			Destination: &cfg.FlashblocksProxy.LogMessages,
+			Destination: &cfg.Flashblocks.LogMessages,
 			EnvVars:     []string{envPrefix + strings.ToUpper(categoryFlashblocks) + "_LOG_MESSAGES"},
 			Name:        categoryFlashblocks + "-log-messages",
 			Usage:       "whether to log flashblocks messages",
@@ -399,7 +399,7 @@ func CommandServe(cfg *config.Config) *cli.Command {
 
 		&cli.IntFlag{ // --flashblocks-log-messages-max-size
 			Category:    strings.ToUpper(categoryFlashblocks),
-			Destination: &cfg.FlashblocksProxy.LogMessagesMaxSize,
+			Destination: &cfg.Flashblocks.LogMessagesMaxSize,
 			EnvVars:     []string{envPrefix + strings.ToUpper(categoryFlashblocks) + "_LOG_MESSAGES_MAX_SIZE"},
 			Name:        categoryFlashblocks + "-log-messages-max-size",
 			Usage:       "do not log flashblocks messages larger than `size`",
@@ -408,7 +408,7 @@ func CommandServe(cfg *config.Config) *cli.Command {
 
 		&cli.IntFlag{ // --flashblocks-read-buffer-size
 			Category:    strings.ToUpper(categoryFlashblocks),
-			Destination: &cfg.FlashblocksProxy.ReadBufferSize,
+			Destination: &cfg.Flashblocks.ReadBufferSize,
 			EnvVars:     []string{envPrefix + strings.ToUpper(categoryFlashblocks) + "_READ_BUFFER_SIZE"},
 			Name:        categoryFlashblocks + "-read-buffer-size",
 			Usage:       "flashblocks read buffer size in `megabytes` (messages from client)",
@@ -417,7 +417,7 @@ func CommandServe(cfg *config.Config) *cli.Command {
 
 		&cli.StringFlag{ // --flashblocks-tls-crt
 			Category:    strings.ToUpper(categoryFlashblocks),
-			Destination: &cfg.FlashblocksProxy.TLSCertificate,
+			Destination: &cfg.Flashblocks.TLSCertificate,
 			DefaultText: "uses plain-text http",
 			EnvVars:     []string{envPrefix + strings.ToUpper(categoryFlashblocks) + "_TLS_CRT"},
 			Name:        categoryFlashblocks + "-tls-crt",
@@ -427,7 +427,7 @@ func CommandServe(cfg *config.Config) *cli.Command {
 		&cli.StringFlag{ // --flashblocks-tls-key
 			Category:    strings.ToUpper(categoryFlashblocks),
 			DefaultText: "uses plain-text http",
-			Destination: &cfg.FlashblocksProxy.TLSKey,
+			Destination: &cfg.Flashblocks.TLSKey,
 			EnvVars:     []string{envPrefix + strings.ToUpper(categoryFlashblocks) + "_TLS_KEY"},
 			Name:        categoryFlashblocks + "-tls-key",
 			Usage:       "`path` to flashblocks tls key",
@@ -435,7 +435,7 @@ func CommandServe(cfg *config.Config) *cli.Command {
 
 		&cli.IntFlag{ // --flashblocks-write-buffer-size
 			Category:    strings.ToUpper(categoryFlashblocks),
-			Destination: &cfg.FlashblocksProxy.WriteBufferSize,
+			Destination: &cfg.Flashblocks.WriteBufferSize,
 			EnvVars:     []string{envPrefix + strings.ToUpper(categoryFlashblocks) + "_WRITE_BUFFER_SIZE"},
 			Name:        categoryFlashblocks + "-write-buffer-size",
 			Usage:       "flashblocks write buffer size in `megabytes` (messages from backend)",
@@ -444,7 +444,7 @@ func CommandServe(cfg *config.Config) *cli.Command {
 	}
 
 	rpcFlags, extraMirroredJrpcMethodsRPC, peerURLsRPC := makeProxyFlags(
-		cfg.RpcProxy.HttpProxy, categoryRPC, "http://127.0.0.1:18545", "0.0.0.0:8545",
+		cfg.Rpc.HttpProxy, categoryRPC, "http://127.0.0.1:18545", "0.0.0.0:8545",
 	)
 
 	metricsFlags := []cli.Flag{ // --metrics-xxx
@@ -472,11 +472,11 @@ func CommandServe(cfg *config.Config) *cli.Command {
 		Flags: flags,
 
 		Before: func(_ *cli.Context) error {
-			cfg.AuthrpcProxy.PeerURLs = peerURLsAuthRPC.Value()
-			cfg.AuthrpcProxy.ExtraMirroredJrpcMethods = extraMirroredJrpcMethodsAuthRPC.Value()
+			cfg.Authrpc.PeerURLs = peerURLsAuthRPC.Value()
+			cfg.Authrpc.ExtraMirroredJrpcMethods = extraMirroredJrpcMethodsAuthRPC.Value()
 
-			cfg.RpcProxy.PeerURLs = peerURLsRPC.Value()
-			cfg.RpcProxy.ExtraMirroredJrpcMethods = extraMirroredJrpcMethodsRPC.Value()
+			cfg.Rpc.PeerURLs = peerURLsRPC.Value()
+			cfg.Rpc.ExtraMirroredJrpcMethods = extraMirroredJrpcMethodsRPC.Value()
 
 			return cfg.Validate()
 		},

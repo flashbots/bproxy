@@ -9,9 +9,9 @@ type Config struct {
 	Chaos *Chaos `yaml:"chaos"`
 	Log   *Log   `yaml:"log"`
 
-	AuthrpcProxy     *AuthrpcProxy     `yaml:"authrpc_proxy"`
-	FlashblocksProxy *FlashblocksProxy `yaml:"flashblocks"`
-	RpcProxy         *RpcProxy         `yaml:"rpc_proxy"`
+	Authrpc     *Authrpc     `yaml:"authrpc"`
+	Flashblocks *Flashblocks `yaml:"flashblocks"`
+	Rpc         *Rpc         `yaml:"rpc"`
 
 	Metrics *Metrics `yaml:"metrics"`
 }
@@ -21,9 +21,9 @@ func New() *Config {
 		Chaos: &Chaos{},
 		Log:   &Log{},
 
-		AuthrpcProxy:     &AuthrpcProxy{HttpProxy: &HttpProxy{Healthcheck: &Healthcheck{}}},
-		FlashblocksProxy: &FlashblocksProxy{WebsocketProxy: &WebsocketProxy{Healthcheck: &Healthcheck{}}},
-		RpcProxy:         &RpcProxy{HttpProxy: &HttpProxy{Healthcheck: &Healthcheck{}}},
+		Authrpc:     &Authrpc{HttpProxy: &HttpProxy{Healthcheck: &Healthcheck{}}},
+		Flashblocks: &Flashblocks{WebsocketProxy: &WebsocketProxy{Healthcheck: &Healthcheck{}}},
+		Rpc:         &Rpc{HttpProxy: &HttpProxy{Healthcheck: &Healthcheck{}}},
 
 		Metrics: &Metrics{},
 	}
@@ -34,7 +34,7 @@ var (
 )
 
 func (c *Config) Validate() error {
-	if !c.AuthrpcProxy.Enabled && !c.RpcProxy.Enabled && !c.FlashblocksProxy.Enabled {
+	if !c.Authrpc.Enabled && !c.Rpc.Enabled && !c.Flashblocks.Enabled {
 		return errConfigNoEnabledProxy
 	}
 
