@@ -333,6 +333,24 @@ func CommandServe(cfg *config.Config) *cli.Command {
 			Value:       "ws://127.0.0.1:11111",
 		},
 
+		&cli.DurationFlag{ // --flashblocks-backward-timeout
+			Category:    strings.ToUpper(categoryFlashblocks),
+			Destination: &cfg.Flashblocks.BackwardTimeout,
+			EnvVars:     []string{envPrefix + strings.ToUpper(categoryFlashblocks) + "_BACKWARD_TIMEOUT"},
+			Name:        categoryFlashblocks + "-backward-timeout",
+			Usage:       "max `duration` for flashblocks frontend reads and backend writes (0s means no timeout)",
+			Value:       0,
+		},
+
+		&cli.DurationFlag{ // --flashblocks-control-timeout
+			Category:    strings.ToUpper(categoryFlashblocks),
+			Destination: &cfg.Flashblocks.BackwardTimeout,
+			EnvVars:     []string{envPrefix + strings.ToUpper(categoryFlashblocks) + "_CONTROL_TIMEOUT"},
+			Name:        categoryFlashblocks + "-control-timeout",
+			Usage:       "max `duration` for control websocket messages reads and writes (0s means no timeout)",
+			Value:       time.Second,
+		},
+
 		&cli.BoolFlag{ // --flashblocks-enabled
 			Category:    strings.ToUpper(categoryFlashblocks),
 			Destination: &cfg.Flashblocks.Enabled,
@@ -340,6 +358,15 @@ func CommandServe(cfg *config.Config) *cli.Command {
 			Name:        categoryFlashblocks + "-enabled",
 			Usage:       "enable flashblocks proxy",
 			Value:       false,
+		},
+
+		&cli.DurationFlag{ // --flashblocks-forward-timeout
+			Category:    strings.ToUpper(categoryFlashblocks),
+			Destination: &cfg.Flashblocks.ForwardTimeout,
+			EnvVars:     []string{envPrefix + strings.ToUpper(categoryFlashblocks) + "_FORWARD_TIMEOUT"},
+			Name:        categoryFlashblocks + "-forward-timeout",
+			Usage:       "max `duration` for flashblocks backend reads and frontend writes (0s means no timeout)",
+			Value:       5 * time.Second,
 		},
 
 		&cli.StringFlag{ // --flashblocks-healthcheck
@@ -413,15 +440,6 @@ func CommandServe(cfg *config.Config) *cli.Command {
 			Name:        categoryFlashblocks + "-read-buffer-size",
 			Usage:       "flashblocks read buffer size in `megabytes` (messages from client)",
 			Value:       16,
-		},
-
-		&cli.DurationFlag{ // --flashblocks-timeout
-			Category:    strings.ToUpper(categoryFlashblocks),
-			Destination: &cfg.Flashblocks.Timeout,
-			EnvVars:     []string{envPrefix + strings.ToUpper(categoryFlashblocks) + "_TIMEOUT"},
-			Name:        categoryFlashblocks + "-timeout",
-			Usage:       "max `duration` for flashblocks websocket reads or writes",
-			Value:       5 * time.Second,
 		},
 
 		&cli.StringFlag{ // --flashblocks-tls-crt

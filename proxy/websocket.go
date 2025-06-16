@@ -13,6 +13,7 @@ import (
 	"github.com/flashbots/bproxy/config"
 	"github.com/flashbots/bproxy/logutils"
 	"github.com/flashbots/bproxy/metrics"
+	"github.com/flashbots/bproxy/utils"
 
 	"github.com/fasthttp/websocket"
 	"github.com/valyala/fasthttp"
@@ -361,7 +362,7 @@ func (p *Websocket) closeWebsocket(conn *websocket.Conn, reason error) error {
 	if reason == nil {
 		return errors.Join(
 			conn.WriteControl(
-				websocket.CloseMessage, nil, time.Now().Add(p.cfg.proxy.Timeout),
+				websocket.CloseMessage, nil, utils.Deadline(p.cfg.proxy.ControlTimeout),
 			),
 			conn.Close(),
 		)
@@ -369,7 +370,7 @@ func (p *Websocket) closeWebsocket(conn *websocket.Conn, reason error) error {
 
 	return errors.Join(
 		conn.WriteControl(
-			websocket.CloseMessage, []byte(reason.Error()), time.Now().Add(p.cfg.proxy.Timeout),
+			websocket.CloseMessage, []byte(reason.Error()), utils.Deadline(p.cfg.proxy.ControlTimeout),
 		),
 		conn.Close(),
 	)

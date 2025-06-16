@@ -54,8 +54,8 @@ func (w *websocketPump) run() error {
 	w.frontend.SetCloseHandler(w.pumpCloseMessages(w.frontend, w.backend, "f->b"))
 	w.backend.SetCloseHandler(w.pumpCloseMessages(w.backend, w.frontend, "b->f"))
 
-	go w.pumpMessages(w.backend, w.frontend, "b->f", done, failure)
-	go w.pumpMessages(w.frontend, w.backend, "f->b", done, failure)
+	go w.pumpMessages(w.backend, w.frontend, w.cfg.proxy.ForwardTimeout, "b->f", done, failure)
+	go w.pumpMessages(w.frontend, w.backend, w.cfg.proxy.BackwardTimeout, "f->b", done, failure)
 
 	w.active.Store(true)
 
@@ -99,6 +99,7 @@ func (w *websocketPump) stop() error {
 
 func (w *websocketPump) pumpMessages(
 	from, to *websocket.Conn,
+	timeout time.Duration,
 	direction string,
 	done chan struct{},
 	failure chan error,
@@ -116,54 +117,66 @@ loop:
 			return
 
 		default:
-			if err := from.SetReadDeadline(time.Now().Add(w.cfg.proxy.Timeout)); err != nil {
-				failure <- err
-				continue loop
-			}
-			msgType, bytes, err := from.ReadMessage()
-			if err != nil {
-				failure <- err
-				continue loop
+			var (
+				msgType int
+				bytes   []byte
+				err     error
+			)
+
+			{ // read
+				if err := from.SetReadDeadline(utils.Deadline(timeout)); err != nil {
+					failure <- err
+					continue loop
+				}
+				msgType, bytes, err = from.ReadMessage()
+				if err != nil {
+					failure <- err
+					continue loop
+				}
 			}
 
 			ts := time.Now()
 
-			if err := to.SetWriteDeadline(time.Now().Add(w.cfg.proxy.Timeout)); err != nil {
-				failure <- err
-				continue loop
-			}
-			err = to.WriteMessage(msgType, bytes)
-			if err != nil {
-				failure <- err
-				continue loop
-			}
-
-			loggedFields := make([]zap.Field, 0, 6)
-			loggedFields = append(loggedFields,
-				zap.Time("ts_message_received", ts),
-				zap.Int("message_type", msgType),
-				zap.Int("message_size", len(bytes)),
-			)
-
-			if w.cfg.proxy.LogMessages && len(bytes) <= w.cfg.proxy.LogMessagesMaxSize {
-				var jsonMessage interface{}
-				if err := json.Unmarshal(bytes, &jsonMessage); err == nil {
-					loggedFields = append(loggedFields,
-						zap.Any("json_message", jsonMessage),
-					)
-				} else {
-					loggedFields = append(loggedFields,
-						zap.NamedError("error_unmarshal", err),
-						zap.String("websocket_message", utils.Str(bytes)),
-					)
+			{ // write
+				if err := to.SetWriteDeadline(utils.Deadline(timeout)); err != nil {
+					failure <- err
+					continue loop
+				}
+				err = to.WriteMessage(msgType, bytes)
+				if err != nil {
+					failure <- err
+					continue loop
 				}
 			}
 
-			metrics.ProxySuccessCount.Add(context.TODO(), 1, otelapi.WithAttributes(
-				attribute.KeyValue{Key: "proxy", Value: attribute.StringValue(w.cfg.name)},
-				attribute.KeyValue{Key: "direction", Value: attribute.StringValue(direction)},
-			))
-			l.Info("Proxied message", loggedFields...)
+			{ // emit logs and metrics
+				loggedFields := make([]zap.Field, 0, 6)
+				loggedFields = append(loggedFields,
+					zap.Time("ts_message_received", ts),
+					zap.Int("message_type", msgType),
+					zap.Int("message_size", len(bytes)),
+				)
+
+				if w.cfg.proxy.LogMessages && len(bytes) <= w.cfg.proxy.LogMessagesMaxSize {
+					var jsonMessage interface{}
+					if err := json.Unmarshal(bytes, &jsonMessage); err == nil {
+						loggedFields = append(loggedFields,
+							zap.Any("json_message", jsonMessage),
+						)
+					} else {
+						loggedFields = append(loggedFields,
+							zap.NamedError("error_unmarshal", err),
+							zap.String("websocket_message", utils.Str(bytes)),
+						)
+					}
+				}
+
+				metrics.ProxySuccessCount.Add(context.TODO(), 1, otelapi.WithAttributes(
+					attribute.KeyValue{Key: "proxy", Value: attribute.StringValue(w.cfg.name)},
+					attribute.KeyValue{Key: "direction", Value: attribute.StringValue(direction)},
+				))
+				l.Info("Proxied message", loggedFields...)
+			}
 		}
 	}
 }
@@ -182,7 +195,7 @@ func (w *websocketPump) pumpPings(
 			zap.String("message", hex.EncodeToString([]byte(message))),
 		)
 		return to.WriteControl(
-			websocket.PingMessage, []byte(message), time.Now().Add(w.cfg.proxy.Timeout),
+			websocket.PingMessage, []byte(message), utils.Deadline(w.cfg.proxy.ControlTimeout),
 		)
 	}
 }
@@ -201,7 +214,7 @@ func (w *websocketPump) pumpPongs(
 			zap.String("message", hex.EncodeToString([]byte(message))),
 		)
 		return to.WriteControl(
-			websocket.PongMessage, []byte(message), time.Now().Add(w.cfg.proxy.Timeout),
+			websocket.PongMessage, []byte(message), utils.Deadline(w.cfg.proxy.ControlTimeout),
 		)
 	}
 }
@@ -221,7 +234,7 @@ func (w *websocketPump) pumpCloseMessages(
 			zap.String("message", hex.EncodeToString([]byte(message))),
 		)
 		return to.WriteControl(
-			code, []byte(message), time.Now().Add(w.cfg.proxy.Timeout),
+			code, []byte(message), utils.Deadline(w.cfg.proxy.ControlTimeout),
 		)
 	}
 }

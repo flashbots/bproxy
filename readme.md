@@ -51,7 +51,10 @@ OPTIONS:
    FLASHBLOCKS
 
    --flashblocks-backend url                            url of flashblocks backend (default: "ws://127.0.0.1:11111") [$BPROXY_FLASHBLOCKS_BACKEND]
+   --flashblocks-backward-timeout duration              max duration for flashblocks frontend reads and backend writes (0s means no timeout) (default: 0s) [$BPROXY_FLASHBLOCKS_BACKWARD_TIMEOUT]
+   --flashblocks-control-timeout duration               max duration for control websocket messages reads and writes (0s means no timeout) (default: 1s) [$BPROXY_FLASHBLOCKS_CONTROL_TIMEOUT]
    --flashblocks-enabled                                enable flashblocks proxy (default: false) [$BPROXY_FLASHBLOCKS_ENABLED]
+   --flashblocks-forward-timeout duration               max duration for flashblocks backend reads and frontend writes (0s means no timeout) (default: 5s) [$BPROXY_FLASHBLOCKS_FORWARD_TIMEOUT]
    --flashblocks-healthcheck url                        url of flashblocks backend healthcheck endpoint (default: disabled) [$BPROXY_FLASHBLOCKS_HEALTHCHECK]
    --flashblocks-healthcheck-interval interval          interval between consecutive flashblocks backend healthchecks (default: 1s) [$BPROXY_FLASHBLOCKS_HEALTHCHECK_INTERVAL]
    --flashblocks-healthcheck-threshold-healthy count    count of consecutive successful healthchecks to consider flashblocks backend to be healthy (default: 2) [$BPROXY_FLASHBLOCKS_HEALTHCHECK_THRESHOLD_HEALTHY]
@@ -60,7 +63,6 @@ OPTIONS:
    --flashblocks-log-messages                           whether to log flashblocks messages (default: false) [$BPROXY_FLASHBLOCKS_LOG_MESSAGES]
    --flashblocks-log-messages-max-size size             do not log flashblocks messages larger than size (default: 4096) [$BPROXY_FLASHBLOCKS_LOG_MESSAGES_MAX_SIZE]
    --flashblocks-read-buffer-size megabytes             flashblocks read buffer size in megabytes (messages from client) (default: 16) [$BPROXY_FLASHBLOCKS_READ_BUFFER_SIZE]
-   --flashblocks-timeout duration                       max duration for flashblocks websocket reads or writes (default: 5s) [$BPROXY_FLASHBLOCKS_TIMEOUT]
    --flashblocks-tls-crt path                           path to flashblocks tls certificate (default: uses plain-text http) [$BPROXY_FLASHBLOCKS_TLS_CRT]
    --flashblocks-tls-key path                           path to flashblocks tls key (default: uses plain-text http) [$BPROXY_FLASHBLOCKS_TLS_KEY]
    --flashblocks-write-buffer-size megabytes            flashblocks write buffer size in megabytes (messages from backend) (default: 16) [$BPROXY_FLASHBLOCKS_WRITE_BUFFER_SIZE]
