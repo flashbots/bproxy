@@ -14,9 +14,11 @@ type Config struct {
 	Rpc         *Rpc         `yaml:"rpc"`
 
 	Metrics *Metrics `yaml:"metrics"`
+
+	Version string `yaml:"-"`
 }
 
-func New() *Config {
+func New(version string) *Config {
 	return &Config{
 		Chaos: &Chaos{},
 		Log:   &Log{},
@@ -26,6 +28,7 @@ func New() *Config {
 		Rpc:         &Rpc{HttpProxy: &HttpProxy{Healthcheck: &Healthcheck{}}},
 
 		Metrics: &Metrics{},
+		Version: version,
 	}
 }
 

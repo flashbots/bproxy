@@ -16,6 +16,7 @@ import (
 	"github.com/flashbots/bproxy/utils"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
+	"go.opentelemetry.io/otel/attribute"
 	otelapi "go.opentelemetry.io/otel/metric"
 	"go.uber.org/zap"
 )
@@ -90,12 +91,17 @@ func (s *Server) Run() error {
 	go func() { // run the metrics server
 		l.Info("Metrics server is going up...",
 			zap.String("server_listen_address", s.cfg.Metrics.ListenAddress),
+			zap.String("version", s.cfg.Version),
 		)
 		if err := s.metrics.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			s.failure <- err
 		}
 		l.Info("Metrics server is down")
 	}()
+
+	metrics.Info.Add(ctx, 1, otelapi.WithAttributes(
+		attribute.KeyValue{Key: "version", Value: attribute.StringValue(s.cfg.Version)},
+	))
 
 	s.authrpc.Run(ctx, s.failure)
 	s.flashblocks.Run(ctx, s.failure)

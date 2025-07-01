@@ -20,7 +20,7 @@ const (
 )
 
 func main() {
-	cfg := config.New()
+	cfg := config.New(version)
 
 	flags := []cli.Flag{
 		&cli.StringFlag{

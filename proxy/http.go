@@ -483,6 +483,7 @@ func (p *HTTP) receive(ctx *fasthttp.RequestCtx) {
 	pj := p.newProxyJob(ctx)
 	defer fasthttp.ReleaseResponse(pj.res)
 	defer fasthttp.ReleaseRequest(pj.req)
+	defer pj.log.Sync() //nolint:errcheck
 
 	pj.wg.Add(1)
 
@@ -545,7 +546,12 @@ func (p *HTTP) receive(ctx *fasthttp.RequestCtx) {
 		}
 	}
 
-	_ = pj.log.Sync()
+	{ // emit metrics
+		metrics.Info.Add(context.TODO(), 1, otelapi.WithAttributes(
+			attribute.KeyValue{Key: "proxy", Value: attribute.StringValue(p.cfg.name)},
+			attribute.KeyValue{Key: "user_agent", Value: attribute.StringValue(string(ctx.UserAgent()))},
+		))
+	}
 }
 
 func (p *HTTP) execProxyJob(job *proxyJob) {

@@ -5,6 +5,8 @@ import (
 )
 
 var (
+	Info otelapi.Int64Counter
+
 	RequestSize  otelapi.Int64Histogram
 	ResponseSize otelapi.Int64Histogram
 

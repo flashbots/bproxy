@@ -24,6 +24,7 @@ func Setup(
 ) error {
 	for _, setup := range []func(context.Context) error{
 		setupMeter, // must come first
+		setupInfo,
 		setupRequestSize,
 		setupResponseSize,
 		setupLatencyAuthrpcJwt,
@@ -83,6 +84,17 @@ func setupMeter(ctx context.Context) error {
 
 	meter = provider.Meter(metricsNamespace)
 
+	return nil
+}
+
+func setupInfo(ctx context.Context) error {
+	m, err := meter.Int64Counter("info",
+		otelapi.WithDescription("target info metadata (see the labels)"),
+	)
+	if err != nil {
+		return err
+	}
+	Info = m
 	return nil
 }
 

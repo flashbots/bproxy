@@ -262,6 +262,13 @@ func (p *Websocket) receive(ctx *fasthttp.RequestCtx) {
 		)
 		return
 	}
+
+	{ // emit metrics
+		metrics.Info.Add(context.TODO(), 1, otelapi.WithAttributes(
+			attribute.KeyValue{Key: "proxy", Value: attribute.StringValue(p.cfg.name)},
+			attribute.KeyValue{Key: "user_agent", Value: attribute.StringValue(string(ctx.UserAgent()))},
+		))
+	}
 }
 
 func (p *Websocket) websocket(ctx *fasthttp.RequestCtx) func(frontend *websocket.Conn) {
