@@ -45,6 +45,59 @@ func CommandServe(cfg *config.Config) *cli.Command {
 				Value:       time.Second,
 			},
 
+			&cli.BoolFlag{ // --chaos-xxx-enabled
+				Category:    strings.ToUpper(categoryChaos),
+				Destination: &cfg.Chaos.Enabled,
+				EnvVars:     []string{envPrefix + strings.ToUpper(categoryChaos+"_"+category) + "_ENABLED"},
+				Name:        categoryChaos + "-" + category + "-enabled",
+				Usage:       "whether " + category + " proxy should be injecting artificial error conditions",
+				Value:       false,
+			},
+
+			&cli.Float64Flag{ // --chaos-xxx-injected-http-error-probability
+				Category:    strings.ToUpper(categoryChaos),
+				Destination: &cfg.Chaos.InjectedHttpErrorProbability,
+				EnvVars:     []string{envPrefix + strings.ToUpper(categoryChaos+"_"+category) + "_INJECTED_HTTP_ERROR_PROBABILITY"},
+				Name:        categoryChaos + "-" + category + "-injected-http-error-probability",
+				Usage:       "probability in `percent` at which to randomly inject http errors into responses processed by " + category + " proxy",
+				Value:       0,
+			},
+
+			&cli.Float64Flag{ // --chaos-xxx-injected-jrpc-error-probability
+				Category:    strings.ToUpper(categoryChaos),
+				Destination: &cfg.Chaos.InjectedJrpcErrorProbability,
+				EnvVars:     []string{envPrefix + strings.ToUpper(categoryChaos+"_"+category) + "_INJECTED_JRPC_ERROR_PROBABILITY"},
+				Name:        categoryChaos + "-" + category + "-injected-jrpc-error-probability",
+				Usage:       "probability in `percent` at which to randomly inject jrpc errors into responses processed by " + category + " proxy",
+				Value:       0,
+			},
+
+			&cli.Float64Flag{ // --chaos-xxx-injected-invalid-jrpc-response-probability
+				Category:    strings.ToUpper(categoryChaos),
+				Destination: &cfg.Chaos.InjectedInvalidJrpcResponseProbability,
+				EnvVars:     []string{envPrefix + strings.ToUpper(categoryChaos+"_"+category) + "_INJECTED_INVALID_JRPC_RESPONSE_PROBABILITY"},
+				Name:        categoryChaos + "-" + category + "-injected-invalid-jrpc-response-probability",
+				Usage:       "probability in `percent` at which to randomly inject invalid jrpc into responses processed by " + category + " proxy",
+				Value:       0,
+			},
+
+			&cli.DurationFlag{ // --chaos-xxx-min-injected-latency
+				Category:    strings.ToUpper(categoryChaos),
+				Destination: &cfg.Chaos.MinInjectedLatency,
+				EnvVars:     []string{envPrefix + strings.ToUpper(categoryChaos+"_"+category) + "_MIN_INJECTED_LATENCY"},
+				Name:        categoryChaos + "-" + category + "-min-injected-latency",
+				Usage:       "min `latency` to enforce on every response processed by " + category + " proxy",
+				Value:       100 * time.Millisecond,
+			},
+
+			&cli.DurationFlag{ // --chaos-xxx-max-injected-latency
+				Category:    strings.ToUpper(categoryChaos),
+				Destination: &cfg.Chaos.MaxInjectedLatency,
+				EnvVars:     []string{envPrefix + strings.ToUpper(categoryChaos+"_"+category) + "_MAX_INJECTED_LATENCY"},
+				Name:        categoryChaos + "-" + category + "-max-injected-latency",
+				Usage:       "max `latency` to randomly enforce on every response processed by " + category + " proxy",
+			},
+
 			&cli.DurationFlag{ // --xxx-client-idle-connection-timeout
 				Category:    strings.ToUpper(category),
 				Destination: &cfg.ClientIdleConnectionTimeout,
@@ -268,61 +321,6 @@ func CommandServe(cfg *config.Config) *cli.Command {
 		},
 	)
 
-	chaosFlags := []cli.Flag{ // --chaos-xxx
-		&cli.BoolFlag{ // --chaos-enabled
-			Category:    strings.ToUpper(categoryChaos),
-			Destination: &cfg.Chaos.Enabled,
-			EnvVars:     []string{envPrefix + strings.ToUpper(categoryChaos) + "_ENABLED"},
-			Name:        categoryChaos + "-enabled",
-			Usage:       "whether bproxy should be injecting artificial error conditions",
-			Value:       false,
-		},
-
-		&cli.Float64Flag{ // --chaos-injected-http-error-probability
-			Category:    strings.ToUpper(categoryChaos),
-			Destination: &cfg.Chaos.InjectedHttpErrorProbability,
-			EnvVars:     []string{envPrefix + strings.ToUpper(categoryChaos) + "_INJECTED_HTTP_ERROR_PROBABILITY"},
-			Name:        categoryChaos + "-injected-http-error-probability",
-			Usage:       "probability in `percent` at which to randomly inject http errors into proxied responses",
-			Value:       20,
-		},
-
-		&cli.Float64Flag{ // --chaos-injected-jrpc-error-probability
-			Category:    strings.ToUpper(categoryChaos),
-			Destination: &cfg.Chaos.InjectedJrpcErrorProbability,
-			EnvVars:     []string{envPrefix + strings.ToUpper(categoryChaos) + "_INJECTED_JRPC_ERROR_PROBABILITY"},
-			Name:        categoryChaos + "-injected-jrpc-error-probability",
-			Usage:       "probability in `percent` at which to randomly inject jrpc errors into proxied responses",
-			Value:       20,
-		},
-
-		&cli.Float64Flag{ // --chaos-injected-invalid-jrpc-response-probability
-			Category:    strings.ToUpper(categoryChaos),
-			Destination: &cfg.Chaos.InjectedInvalidJrpcResponseProbability,
-			EnvVars:     []string{envPrefix + strings.ToUpper(categoryChaos) + "_INJECTED_INVALID_JRPC_RESPONSE_PROBABILITY"},
-			Name:        categoryChaos + "-injected-invalid-jrpc-response-probability",
-			Usage:       "probability in `percent` at which to randomly inject invalid jrpc into proxied responses",
-			Value:       20,
-		},
-
-		&cli.DurationFlag{ // --chaos-min-injected-latency
-			Category:    strings.ToUpper(categoryChaos),
-			Destination: &cfg.Chaos.MinInjectedLatency,
-			EnvVars:     []string{envPrefix + strings.ToUpper(categoryChaos) + "_MIN_INJECTED_LATENCY"},
-			Name:        categoryChaos + "-min-injected-latency",
-			Usage:       "min `latency` to enforce on every proxied response",
-			Value:       50 * time.Millisecond,
-		},
-
-		&cli.DurationFlag{ // --chaos-max-injected-latency
-			Category:    strings.ToUpper(categoryChaos),
-			Destination: &cfg.Chaos.MaxInjectedLatency,
-			EnvVars:     []string{envPrefix + strings.ToUpper(categoryChaos) + "_MAX_INJECTED_LATENCY"},
-			Name:        categoryChaos + "-max-injected-latency",
-			Usage:       "max `latency` to randomly enforce on every proxied response",
-		},
-	}
-
 	flashblocksFlags := []cli.Flag{ // --flashblocks-xxx
 		&cli.StringFlag{ // --flashblocks-backend
 			Category:    strings.ToUpper(categoryFlashblocks),
@@ -340,6 +338,59 @@ func CommandServe(cfg *config.Config) *cli.Command {
 			Name:        categoryFlashblocks + "-backward-timeout",
 			Usage:       "max `duration` for flashblocks frontend reads and backend writes (0s means no timeout)",
 			Value:       0,
+		},
+
+		&cli.Float64Flag{ // --chaos-flashblocks-dropped-message-probability
+			Category:    strings.ToUpper(categoryChaos),
+			Destination: &cfg.Flashblocks.Chaos.DroppedMessageProbability,
+			EnvVars:     []string{envPrefix + strings.ToUpper(categoryChaos) + "_FLASHBLOCKS_DROPPED_MESSAGE_PROBABILITY"},
+			Name:        categoryChaos + "-flashblocks-dropped-message-probability",
+			Usage:       "probability in `percent` at which to randomly drop messages processed by flashblocks proxy",
+			Value:       0,
+		},
+
+		&cli.BoolFlag{ // --chaos-flashblocks-enabled
+			Category:    strings.ToUpper(categoryChaos),
+			Destination: &cfg.Flashblocks.Chaos.Enabled,
+			EnvVars:     []string{envPrefix + strings.ToUpper(categoryChaos) + "_FLASHBLOCKS_ENABLED"},
+			Name:        categoryChaos + "-flashblocks-enabled",
+			Usage:       "whether flashblocks proxy should be injecting artificial error conditions",
+			Value:       false,
+		},
+
+		&cli.Float64Flag{ // --chaos-flashblocks-injected-invalid-flashblock-payload-probability
+			Category:    strings.ToUpper(categoryChaos),
+			Destination: &cfg.Flashblocks.Chaos.InjectedInvalidFlashblockPayloadProbability,
+			EnvVars:     []string{envPrefix + strings.ToUpper(categoryChaos) + "_FLASHBLOCKS_INJECTED_INVALID_FLASHBLOCK_PAYLOAD_PROBABILITY"},
+			Name:        categoryChaos + "-flashblocks-injected-invalid-flashblock-payload-probability",
+			Usage:       "probability in `percent` at which to randomly inject an invalid flashblock",
+			Value:       0,
+		},
+
+		&cli.Float64Flag{ // --chaos-flashblocks-injected-malformed-json-message-probability
+			Category:    strings.ToUpper(categoryChaos),
+			Destination: &cfg.Flashblocks.Chaos.InjectedMalformedJsonMessageProbability,
+			EnvVars:     []string{envPrefix + strings.ToUpper(categoryChaos) + "_FLASHBLOCKS_INJECTED_MALFORMED_JSON_MESSAGE_PROBABILITY"},
+			Name:        categoryChaos + "-flashblocks-injected-malformed-json-message-probability",
+			Usage:       "probability in `percent` at which to randomly inject a malformed json message",
+			Value:       0,
+		},
+
+		&cli.DurationFlag{ // --chaos-flashblocks-min-injected-latency
+			Category:    strings.ToUpper(categoryChaos),
+			Destination: &cfg.Flashblocks.Chaos.MinInjectedLatency,
+			EnvVars:     []string{envPrefix + strings.ToUpper(categoryChaos) + "_FLASHBLOCKS_MIN_INJECTED_LATENCY"},
+			Name:        categoryChaos + "-flashblocks-min-injected-latency",
+			Usage:       "min `latency` to enforce on every response processed by flashblocks proxy",
+			Value:       100 * time.Millisecond,
+		},
+
+		&cli.DurationFlag{ // --chaos-flashblocks-max-injected-latency
+			Category:    strings.ToUpper(categoryChaos),
+			Destination: &cfg.Flashblocks.Chaos.MaxInjectedLatency,
+			EnvVars:     []string{envPrefix + strings.ToUpper(categoryChaos) + "_FLASHBLOCKS_MAX_INJECTED_LATENCY"},
+			Name:        categoryChaos + "-flashblocks-max-injected-latency",
+			Usage:       "max `latency` to randomly enforce on every response processed by flashblocks proxy",
 		},
 
 		&cli.DurationFlag{ // --flashblocks-control-timeout
@@ -489,7 +540,6 @@ func CommandServe(cfg *config.Config) *cli.Command {
 		authrpcFlags,
 		flashblocksFlags,
 		rpcFlags,
-		chaosFlags,
 		metricsFlags,
 	)
 

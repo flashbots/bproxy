@@ -27,9 +27,7 @@ import (
 )
 
 type httpConfig struct {
-	name string
-
-	chaos *config.Chaos
+	name  string
 	proxy *config.HttpProxy
 }
 
@@ -388,10 +386,10 @@ func (p *HTTP) newProxyJob(ctx *fasthttp.RequestCtx) *proxyJob {
 			job.triage.Mirror = job.triage.Mirror || mirror
 		}
 
-		if p.cfg.chaos.Enabled {
-			injectHttpError := rand.Float64() < p.cfg.chaos.InjectedHttpErrorProbability/100
-			injectJrpcError := rand.Float64() < p.cfg.chaos.InjectedJrpcErrorProbability/100
-			injectBadJrpcResponse := rand.Float64() < p.cfg.chaos.InjectedInvalidJrpcResponseProbability/100
+		if p.cfg.proxy.Chaos.Enabled {
+			injectHttpError := rand.Float64() < p.cfg.proxy.Chaos.InjectedHttpErrorProbability/100
+			injectJrpcError := rand.Float64() < p.cfg.proxy.Chaos.InjectedJrpcErrorProbability/100
+			injectBadJrpcResponse := rand.Float64() < p.cfg.proxy.Chaos.InjectedInvalidJrpcResponseProbability/100
 
 			if injectHttpError || injectJrpcError || injectBadJrpcResponse {
 				job.triage.Proxy = false
@@ -400,20 +398,20 @@ func (p *HTTP) newProxyJob(ctx *fasthttp.RequestCtx) *proxyJob {
 
 			switch {
 			case injectHttpError:
+				loggedFields = append(loggedFields,
+					zap.Bool("chaos_injected_http_error", true),
+				)
 				job.proxy = p.injectHttpError
-				loggedFields = append(loggedFields,
-					zap.Bool("chaos_http_error", true),
-				)
 			case injectJrpcError:
+				loggedFields = append(loggedFields,
+					zap.Bool("chaos_injected_jrpc_error", true),
+				)
 				job.proxy = p.injectJrpcError(job.triage, job.req, job.res)
-				loggedFields = append(loggedFields,
-					zap.Bool("chaos_jrpc_error", true),
-				)
 			case injectBadJrpcResponse:
-				job.proxy = p.injectInvalidJrpcResponse
 				loggedFields = append(loggedFields,
-					zap.Bool("chaos_invalid_jrpc_response", true),
+					zap.Bool("chaos_injected_invalid_jrpc_response", true),
 				)
+				job.proxy = p.injectInvalidJrpcResponse
 			}
 		}
 
@@ -584,13 +582,13 @@ func (p *HTTP) execProxyJob(job *proxyJob) {
 		)
 	}
 
-	if p.cfg.chaos.Enabled { // chaos-inject latency
-		latency := time.Duration(rand.Int64N(int64(p.cfg.chaos.MaxInjectedLatency) + 1))
-		latency = max(latency, p.cfg.chaos.MinInjectedLatency)
-		time.Sleep(latency - time.Since(job.tsReqReceived))
+	if p.cfg.proxy.Chaos.Enabled { // chaos-inject latency
 		loggedFields = append(loggedFields,
-			zap.Bool("latency_chaos", true),
+			zap.Bool("chaos_injected_latency", true),
 		)
+		latency := time.Duration(rand.Int64N(int64(p.cfg.proxy.Chaos.MaxInjectedLatency) + 1))
+		latency = max(latency, p.cfg.proxy.Chaos.MinInjectedLatency)
+		time.Sleep(latency - time.Since(job.tsReqReceived))
 	}
 
 	{ // add log fields

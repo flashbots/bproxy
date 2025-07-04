@@ -29,12 +29,10 @@ type Rpc struct {
 
 func NewRpc(
 	cfg *config.Rpc,
-	chaos *config.Chaos,
 ) (*Rpc, error) {
 	p, err := newHTTP(&httpConfig{
 		name:  "bproxy-rpc",
 		proxy: cfg.HttpProxy,
-		chaos: chaos,
 	})
 	if err != nil {
 		return nil, err

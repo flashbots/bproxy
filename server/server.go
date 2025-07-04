@@ -41,7 +41,7 @@ func New(cfg *config.Config) (*Server, error) {
 	}
 
 	if cfg.Authrpc.Enabled {
-		authrpc, err := proxy.NewAuthrpc(s.cfg.Authrpc, s.cfg.Chaos)
+		authrpc, err := proxy.NewAuthrpc(s.cfg.Authrpc)
 		if err != nil {
 			return nil, err
 		}
@@ -57,7 +57,7 @@ func New(cfg *config.Config) (*Server, error) {
 	}
 
 	if cfg.Rpc.Enabled {
-		rpc, err := proxy.NewRpc(s.cfg.Rpc, s.cfg.Chaos)
+		rpc, err := proxy.NewRpc(s.cfg.Rpc)
 		if err != nil {
 			return nil, err
 		}

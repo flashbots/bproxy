@@ -37,12 +37,10 @@ type authrpcConfig struct {
 
 func NewAuthrpc(
 	cfg *config.Authrpc,
-	chaos *config.Chaos,
 ) (*Authrpc, error) {
 	p, err := newHTTP(&httpConfig{
 		name:  "bproxy-authrpc",
 		proxy: cfg.HttpProxy,
-		chaos: chaos,
 	})
 	if err != nil {
 		return nil, err

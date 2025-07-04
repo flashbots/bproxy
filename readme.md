@@ -41,18 +41,30 @@ OPTIONS:
 
    CHAOS
 
-   --chaos-enabled                                             whether bproxy should be injecting artificial error conditions (default: false) [$BPROXY_CHAOS_ENABLED]
-   --chaos-injected-http-error-probability percent             probability in percent at which to randomly inject http errors into proxied responses (default: 20) [$BPROXY_CHAOS_INJECTED_HTTP_ERROR_PROBABILITY]
-   --chaos-injected-invalid-jrpc-response-probability percent  probability in percent at which to randomly inject invalid jrpc into proxied responses (default: 20) [$BPROXY_CHAOS_INJECTED_INVALID_JRPC_RESPONSE_PROBABILITY]
-   --chaos-injected-jrpc-error-probability percent             probability in percent at which to randomly inject jrpc errors into proxied responses (default: 20) [$BPROXY_CHAOS_INJECTED_JRPC_ERROR_PROBABILITY]
-   --chaos-max-injected-latency latency                        max latency to randomly enforce on every proxied response (default: 0s) [$BPROXY_CHAOS_MAX_INJECTED_LATENCY]
-   --chaos-min-injected-latency latency                        min latency to enforce on every proxied response (default: 50ms) [$BPROXY_CHAOS_MIN_INJECTED_LATENCY]
+   --chaos-authrpc-enabled                                                      whether authrpc proxy should be injecting artificial error conditions (default: false) [$BPROXY_CHAOS_AUTHRPC_ENABLED]
+   --chaos-authrpc-injected-http-error-probability percent                      probability in percent at which to randomly inject http errors into responses processed by authrpc proxy (default: 0) [$BPROXY_CHAOS_AUTHRPC_INJECTED_HTTP_ERROR_PROBABILITY]
+   --chaos-authrpc-injected-invalid-jrpc-response-probability percent           probability in percent at which to randomly inject invalid jrpc into responses processed by authrpc proxy (default: 0) [$BPROXY_CHAOS_AUTHRPC_INJECTED_INVALID_JRPC_RESPONSE_PROBABILITY]
+   --chaos-authrpc-injected-jrpc-error-probability percent                      probability in percent at which to randomly inject jrpc errors into responses processed by authrpc proxy (default: 0) [$BPROXY_CHAOS_AUTHRPC_INJECTED_JRPC_ERROR_PROBABILITY]
+   --chaos-authrpc-max-injected-latency latency                                 max latency to randomly enforce on every response processed by authrpc proxy (default: 0s) [$BPROXY_CHAOS_AUTHRPC_MAX_INJECTED_LATENCY]
+   --chaos-authrpc-min-injected-latency latency                                 min latency to enforce on every response processed by authrpc proxy (default: 100ms) [$BPROXY_CHAOS_AUTHRPC_MIN_INJECTED_LATENCY]
+   --chaos-flashblocks-dropped-message-probability percent                      probability in percent at which to randomly drop messages processed by flashblocks proxy (default: 0) [$BPROXY_CHAOS_FLASHBLOCKS_DROPPED_MESSAGE_PROBABILITY]
+   --chaos-flashblocks-enabled                                                  whether flashblocks proxy should be injecting artificial error conditions (default: false) [$BPROXY_CHAOS_FLASHBLOCKS_ENABLED]
+   --chaos-flashblocks-injected-invalid-flashblock-payload-probability percent  probability in percent at which to randomly inject an invalid flashblock (default: 0) [$BPROXY_CHAOS_FLASHBLOCKS_INJECTED_INVALID_FLASHBLOCK_PAYLOAD_PROBABILITY]
+   --chaos-flashblocks-injected-malformed-json-message-probability percent      probability in percent at which to randomly inject a malformed json message (default: 0) [$BPROXY_CHAOS_FLASHBLOCKS_INJECTED_MALFORMED_JSON_MESSAGE_PROBABILITY]
+   --chaos-flashblocks-max-injected-latency latency                             max latency to randomly enforce on every response processed by flashblocks proxy (default: 0s) [$BPROXY_CHAOS_FLASHBLOCKS_MAX_INJECTED_LATENCY]
+   --chaos-flashblocks-min-injected-latency latency                             min latency to enforce on every response processed by flashblocks proxy (default: 100ms) [$BPROXY_CHAOS_FLASHBLOCKS_MIN_INJECTED_LATENCY]
+   --chaos-rpc-enabled                                                          whether rpc proxy should be injecting artificial error conditions (default: false) [$BPROXY_CHAOS_RPC_ENABLED]
+   --chaos-rpc-injected-http-error-probability percent                          probability in percent at which to randomly inject http errors into responses processed by rpc proxy (default: 0) [$BPROXY_CHAOS_RPC_INJECTED_HTTP_ERROR_PROBABILITY]
+   --chaos-rpc-injected-invalid-jrpc-response-probability percent               probability in percent at which to randomly inject invalid jrpc into responses processed by rpc proxy (default: 0) [$BPROXY_CHAOS_RPC_INJECTED_INVALID_JRPC_RESPONSE_PROBABILITY]
+   --chaos-rpc-injected-jrpc-error-probability percent                          probability in percent at which to randomly inject jrpc errors into responses processed by rpc proxy (default: 0) [$BPROXY_CHAOS_RPC_INJECTED_JRPC_ERROR_PROBABILITY]
+   --chaos-rpc-max-injected-latency latency                                     max latency to randomly enforce on every response processed by rpc proxy (default: 0s) [$BPROXY_CHAOS_RPC_MAX_INJECTED_LATENCY]
+   --chaos-rpc-min-injected-latency latency                                     min latency to enforce on every response processed by rpc proxy (default: 100ms) [$BPROXY_CHAOS_RPC_MIN_INJECTED_LATENCY]
 
    FLASHBLOCKS
 
    --flashblocks-backend url                            url of flashblocks backend (default: "ws://127.0.0.1:11111") [$BPROXY_FLASHBLOCKS_BACKEND]
    --flashblocks-backward-timeout duration              max duration for flashblocks frontend reads and backend writes (0s means no timeout) (default: 0s) [$BPROXY_FLASHBLOCKS_BACKWARD_TIMEOUT]
-   --flashblocks-control-timeout duration               max duration for control websocket messages reads and writes (0s means no timeout) (default: 1s) [$BPROXY_FLASHBLOCKS_CONTROL_TIMEOUT]
+   --flashblocks-control-timeout duration               max duration for control websocket messages reads and writes (0s means no timeout) (default: 2s) [$BPROXY_FLASHBLOCKS_CONTROL_TIMEOUT]
    --flashblocks-enabled                                enable flashblocks proxy (default: false) [$BPROXY_FLASHBLOCKS_ENABLED]
    --flashblocks-forward-timeout duration               max duration for flashblocks backend reads and frontend writes (0s means no timeout) (default: 5s) [$BPROXY_FLASHBLOCKS_FORWARD_TIMEOUT]
    --flashblocks-healthcheck url                        url of flashblocks backend healthcheck endpoint (default: disabled) [$BPROXY_FLASHBLOCKS_HEALTHCHECK]

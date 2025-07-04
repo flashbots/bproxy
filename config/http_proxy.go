@@ -16,6 +16,7 @@ import (
 type HttpProxy struct {
 	BackendTimeout                  time.Duration `yaml:"backend_timeout"`
 	BackendURL                      string        `yaml:"backend_url"`
+	Chaos                           *ChaosHttp    `yaml:"chaos"`
 	ClientIdleConnectionTimeout     time.Duration `yaml:"client_idle_connection_timeout"`
 	Enabled                         bool          `yaml:"enabled"`
 	ExtraMirroredJrpcMethods        []string      `yaml:"extra_mirrored_jrpc_methods"`

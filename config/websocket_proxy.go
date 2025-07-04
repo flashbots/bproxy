@@ -14,19 +14,20 @@ import (
 )
 
 type WebsocketProxy struct {
-	BackendURL         string        `yaml:"backend_url"`
-	BackwardTimeout    time.Duration `yaml:"backward_timeout"`
-	ControlTimeout     time.Duration `yaml:"control_timeout"`
-	Enabled            bool          `yaml:"enabled"`
-	ForwardTimeout     time.Duration `yaml:"forward_timeout"`
-	Healthcheck        *Healthcheck  `yaml:"healthcheck"`
-	ListenAddress      string        `yaml:"listen_address"`
-	LogMessages        bool          `yaml:"log_messages"`
-	LogMessagesMaxSize int           `yaml:"log_messages_max_size"`
-	ReadBufferSize     int           `yaml:"read_buffer_size_mb"`
-	TLSCertificate     string        `yaml:"tls_crt"`
-	TLSKey             string        `yaml:"tls_key"`
-	WriteBufferSize    int           `yaml:"write_buffer_size_mb"`
+	BackendURL         string          `yaml:"backend_url"`
+	BackwardTimeout    time.Duration   `yaml:"backward_timeout"`
+	Chaos              *ChaosWebsocket `yaml:"chaos"`
+	ControlTimeout     time.Duration   `yaml:"control_timeout"`
+	Enabled            bool            `yaml:"enabled"`
+	ForwardTimeout     time.Duration   `yaml:"forward_timeout"`
+	Healthcheck        *Healthcheck    `yaml:"healthcheck"`
+	ListenAddress      string          `yaml:"listen_address"`
+	LogMessages        bool            `yaml:"log_messages"`
+	LogMessagesMaxSize int             `yaml:"log_messages_max_size"`
+	ReadBufferSize     int             `yaml:"read_buffer_size_mb"`
+	TLSCertificate     string          `yaml:"tls_crt"`
+	TLSKey             string          `yaml:"tls_key"`
+	WriteBufferSize    int             `yaml:"write_buffer_size_mb"`
 }
 
 var (

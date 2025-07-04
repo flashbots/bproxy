@@ -6,29 +6,35 @@ import (
 )
 
 type Config struct {
-	Chaos *Chaos `yaml:"chaos"`
-	Log   *Log   `yaml:"log"`
-
 	Authrpc     *Authrpc     `yaml:"authrpc"`
 	Flashblocks *Flashblocks `yaml:"flashblocks"`
 	Rpc         *Rpc         `yaml:"rpc"`
 
+	Log     *Log     `yaml:"log"`
 	Metrics *Metrics `yaml:"metrics"`
-
-	Version string `yaml:"-"`
+	Version string   `yaml:"-"`
 }
 
 func New(version string) *Config {
 	return &Config{
-		Chaos: &Chaos{},
-		Log:   &Log{},
-
-		Authrpc:     &Authrpc{HttpProxy: &HttpProxy{Healthcheck: &Healthcheck{}}},
-		Flashblocks: &Flashblocks{WebsocketProxy: &WebsocketProxy{Healthcheck: &Healthcheck{}}},
-		Rpc:         &Rpc{HttpProxy: &HttpProxy{Healthcheck: &Healthcheck{}}},
-
+		Log:     &Log{},
 		Metrics: &Metrics{},
 		Version: version,
+
+		Authrpc: &Authrpc{HttpProxy: &HttpProxy{
+			Chaos:       &ChaosHttp{},
+			Healthcheck: &Healthcheck{}},
+		},
+
+		Flashblocks: &Flashblocks{WebsocketProxy: &WebsocketProxy{
+			Chaos:       &ChaosWebsocket{},
+			Healthcheck: &Healthcheck{},
+		}},
+
+		Rpc: &Rpc{HttpProxy: &HttpProxy{
+			Chaos:       &ChaosHttp{},
+			Healthcheck: &Healthcheck{},
+		}},
 	}
 }
 

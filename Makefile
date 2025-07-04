@@ -26,12 +26,12 @@ serve:
 			--authrpc-listen-address 127.0.0.1:18651 \
 			--authrpc-log-requests \
 			--authrpc-log-responses \
-			--authrpc-max-request-size 150 \
-			--authrpc-max-response-size 1150 \
+			--flashblocks-backend ws://127.0.0.1:1111 \
+			--flashblocks-enabled \
+			--flashblocks-listen-address 127.0.0.1:11111 \
+			--flashblocks-log-messages \
 			--rpc-backend http://127.0.0.1:8645 \
 			--rpc-enabled \
 			--rpc-listen-address 127.0.0.1:18645 \
 			--rpc-log-requests \
 			--rpc-log-responses
-			--rpc-max-request-size 150 \
-			--rpc-max-response-size 1150 \
