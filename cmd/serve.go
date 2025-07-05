@@ -87,7 +87,6 @@ func CommandServe(cfg *config.Config) *cli.Command {
 				EnvVars:     []string{envPrefix + strings.ToUpper(categoryChaos+"_"+category) + "_MIN_INJECTED_LATENCY"},
 				Name:        categoryChaos + "-" + category + "-min-injected-latency",
 				Usage:       "min `latency` to enforce on every response processed by " + category + " proxy",
-				Value:       100 * time.Millisecond,
 			},
 
 			&cli.DurationFlag{ // --chaos-xxx-max-injected-latency
@@ -382,7 +381,6 @@ func CommandServe(cfg *config.Config) *cli.Command {
 			EnvVars:     []string{envPrefix + strings.ToUpper(categoryChaos) + "_FLASHBLOCKS_MIN_INJECTED_LATENCY"},
 			Name:        categoryChaos + "-flashblocks-min-injected-latency",
 			Usage:       "min `latency` to enforce on every response processed by flashblocks proxy",
-			Value:       100 * time.Millisecond,
 		},
 
 		&cli.DurationFlag{ // --chaos-flashblocks-max-injected-latency

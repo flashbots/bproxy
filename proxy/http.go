@@ -583,12 +583,14 @@ func (p *HTTP) execProxyJob(job *proxyJob) {
 	}
 
 	if p.cfg.proxy.Chaos.Enabled { // chaos-inject latency
-		loggedFields = append(loggedFields,
-			zap.Bool("chaos_injected_latency", true),
-		)
-		latency := time.Duration(rand.Int64N(int64(p.cfg.proxy.Chaos.MaxInjectedLatency) + 1))
-		latency = max(latency, p.cfg.proxy.Chaos.MinInjectedLatency)
-		time.Sleep(latency - time.Since(job.tsReqReceived))
+		if p.cfg.proxy.Chaos.MinInjectedLatency > 0 || p.cfg.proxy.Chaos.MaxInjectedLatency > 0 {
+			loggedFields = append(loggedFields,
+				zap.Bool("chaos_injected_latency", true),
+			)
+			latency := time.Duration(rand.Int64N(int64(p.cfg.proxy.Chaos.MaxInjectedLatency) + 1))
+			latency = max(latency, p.cfg.proxy.Chaos.MinInjectedLatency)
+			time.Sleep(latency - time.Since(job.tsReqReceived))
+		}
 	}
 
 	{ // add log fields
