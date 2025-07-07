@@ -178,11 +178,16 @@ func (p *websocketPump) pumpMessages(
 						continue
 					}
 
-					if injectInvalidFlashblockPayload { // inject invalid flashblock
-						loggedFields = append(loggedFields,
-							zap.Bool("chaos_injected_invalid_flashblock_payload", true),
-						)
-						m.chaosMangle()
+					if injectInvalidFlashblockPayload { // inject invalid flashblock payload
+						if err := m.chaosMangle(); err == nil {
+							loggedFields = append(loggedFields,
+								zap.Bool("chaos_injected_invalid_flashblock_payload", true),
+							)
+						} else {
+							l.Warn("Failed to generate invalid flashblock payload",
+								zap.Error(err),
+							)
+						}
 					}
 
 					if injectMalformedJsonMessage { // inject malformed json

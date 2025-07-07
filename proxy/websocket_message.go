@@ -15,10 +15,10 @@ type websocketMessage struct {
 	ts      time.Time
 }
 
-func (m *websocketMessage) chaosMangle() {
-	flashblock := flashblock.Flashblock{}
-	if err := json.Unmarshal(m.bytes, &flashblock); err != nil {
-		return
+func (m *websocketMessage) chaosMangle() error {
+	flashblock := &flashblock.Flashblock{}
+	if err := json.Unmarshal(m.bytes, flashblock); err != nil {
+		return err
 	}
 
 	mangles := 2
@@ -60,6 +60,15 @@ func (m *websocketMessage) chaosMangle() {
 	case 9: // withdrawals root
 		flashblock.Diff.WithdrawalsRoot = mangleHex(flashblock.Diff.WithdrawalsRoot)
 	}
+
+	bytes, err := json.Marshal(flashblock)
+	if err != nil {
+		return err
+	}
+
+	m.bytes = bytes
+
+	return nil
 }
 
 func mangleHex(hex string) string {
