@@ -14,7 +14,19 @@ var (
 	errFailedToDecodeEthSendRawTransaction = errors.New("failed to decode eth_sendRawTransaction")
 )
 
-func decodeEthSendRawTransaction(params json.RawMessage) (ethcommon.Address, *ethtypes.Transaction, error) {
+func decodeEthSendRawTransaction(params json.RawMessage) (
+	addr ethcommon.Address, tx *ethtypes.Transaction, err error,
+) {
+	defer func() {
+		// ethtypes.LatestSignerForChainID panics on invalid chain ID => it can
+		// be that other underlying libraries have this bad habit as well
+		if r := recover(); r != nil {
+			err = fmt.Errorf("%w: panic: %v",
+				errFailedToDecodeEthSendRawTransaction, r,
+			)
+		}
+	}()
+
 	var inputs []string
 	if err := json.Unmarshal(params, &inputs); err != nil {
 		return ethcommon.Address{}, nil, fmt.Errorf("%w: %w",
@@ -23,7 +35,8 @@ func decodeEthSendRawTransaction(params json.RawMessage) (ethcommon.Address, *et
 	}
 	if len(inputs) != 1 {
 		return ethcommon.Address{}, nil, fmt.Errorf("%w: expected 1 parameter, got %d",
-			errFailedToDecodeEthSendRawTransaction, len(inputs))
+			errFailedToDecodeEthSendRawTransaction, len(inputs),
+		)
 	}
 
 	bytes, err := hexutil.Decode(inputs[0])
@@ -33,10 +46,16 @@ func decodeEthSendRawTransaction(params json.RawMessage) (ethcommon.Address, *et
 		)
 	}
 
-	tx := new(ethtypes.Transaction)
+	tx = new(ethtypes.Transaction)
 	if err := tx.UnmarshalBinary(bytes); err != nil {
 		return ethcommon.Address{}, nil, fmt.Errorf("%w: %w",
 			errFailedToDecodeEthSendRawTransaction, err,
+		)
+	}
+
+	if tx.ChainId() == nil || tx.ChainId().Sign() <= 0 {
+		return ethcommon.Address{}, nil, fmt.Errorf("%w: invalid chain id: %v",
+			errFailedToDecodeEthSendRawTransaction, tx.ChainId(),
 		)
 	}
 
@@ -48,5 +67,4 @@ func decodeEthSendRawTransaction(params json.RawMessage) (ethcommon.Address, *et
 	}
 
 	return from, tx, nil
-
 }
