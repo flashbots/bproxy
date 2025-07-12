@@ -62,12 +62,13 @@ func newWebsocket(cfg *websocketConfig) (*Websocket, error) {
 	}
 
 	p.frontend = &fasthttp.Server{
-		ConnState:    p.upstreamConnectionChanged,
-		Handler:      p.receive,
-		Logger:       logutils.FasthttpLogger(l),
-		Name:         cfg.name,
-		ReadTimeout:  5 * time.Second,
-		WriteTimeout: 5 * time.Second,
+		ConnState:         p.upstreamConnectionChanged,
+		Handler:           p.receive,
+		KeepHijackedConns: true, // we close them explicitly
+		Logger:            logutils.FasthttpLogger(l),
+		Name:              cfg.name,
+		ReadTimeout:       5 * time.Second,
+		WriteTimeout:      5 * time.Second,
 	}
 
 	if cfg.proxy.TLSCertificate != "" && cfg.proxy.TLSKey != "" {
@@ -306,15 +307,24 @@ func (p *Websocket) websocket(ctx *fasthttp.RequestCtx) func(frontend *websocket
 			)
 		}
 
-		err = p.closeWebsocket(pump.backend, reason)
-		l.Info("Closed backend connection",
-			zap.Error(err),
-		)
+		if err := p.closeWebsocket(pump.backend, reason); err == nil {
+			l.Info("Closed backend connection")
+		} else {
+			l.Warn("Failed to close backend connection",
+				zap.Error(err),
+			)
+		}
 
-		err = p.closeWebsocket(pump.frontend, reason)
-		l.Info("Closed frontend connection",
-			zap.Error(err),
-		)
+		if err = p.closeWebsocket(pump.frontend, reason); err == nil {
+			l.Info("Closed frontend connection")
+			metrics.FrontendConnectionsClosedCount.Add(context.TODO(), 1, otelapi.WithAttributes(
+				attribute.KeyValue{Key: "proxy", Value: attribute.StringValue(p.cfg.name)},
+			))
+		} else {
+			l.Warn("Failed to close frontend connection",
+				zap.Error(err),
+			)
+		}
 
 		p.mxConnections.Lock()
 		delete(p.pumps, addr)
