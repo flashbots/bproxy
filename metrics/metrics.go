@@ -24,23 +24,26 @@ func Setup(
 ) error {
 	for _, setup := range []func(context.Context) error{
 		setupMeter, // must come first
+
+		setupFrontendConnectionsActiveCount,
+		setupFrontendConnectionsClosedCount,
+		setupFrontendConnectionsDrainingCount,
+		setupFrontendConnectionsEstablishedCount,
 		setupInfo,
-		setupRequestSize,
-		setupResponseSize,
+		setupLateFCUCount,
 		setupLatencyAuthrpcJwt,
 		setupLatencyBackend,
 		setupLatencyTotal,
-		setupProxySuccessCount,
+		setupMirrorDropCount,
+		setupMirrorFailureCount,
+		setupMirrorSuccessCount,
 		setupProxyFailureCount,
 		setupProxyFakeCount,
-		setupMirrorSuccessCount,
-		setupMirrorFailureCount,
-		setupMirrorDropCount,
-		setupFrontendConnectionsCount,
-		setupFrontendDrainingConnectionsCount,
+		setupProxySuccessCount,
+		setupRequestSize,
+		setupResponseSize,
 		setupTLSValidNotAfter,
 		setupTLSValidNotBefore,
-		setupLateFCUCount,
 	} {
 		if err := setup(ctx); err != nil {
 			return err
@@ -48,8 +51,8 @@ func Setup(
 	}
 
 	if _, err := meter.RegisterCallback(observe,
-		FrontendConnectionsCount,
-		FrontendDrainingConnectionsCount,
+		FrontendConnectionsActiveCount,
+		FrontendConnectionsDrainingCount,
 		TLSValidNotAfter,
 		TLSValidNotBefore,
 	); err != nil {
@@ -87,6 +90,50 @@ func setupMeter(ctx context.Context) error {
 	return nil
 }
 
+func setupFrontendConnectionsActiveCount(ctx context.Context) error {
+	m, err := meter.Int64ObservableGauge("frontend_connections_active_count",
+		otelapi.WithDescription("count of open frontend connections"),
+	)
+	if err != nil {
+		return err
+	}
+	FrontendConnectionsActiveCount = m
+	return nil
+}
+
+func setupFrontendConnectionsClosedCount(ctx context.Context) error {
+	m, err := meter.Int64Counter("frontend_connections_closed_count",
+		otelapi.WithDescription("counter for network connections closed"),
+	)
+	if err != nil {
+		return err
+	}
+	FrontendConnectionsClosedCount = m
+	return nil
+}
+
+func setupFrontendConnectionsDrainingCount(ctx context.Context) error {
+	m, err := meter.Int64ObservableGauge("frontend_connections_draining_count",
+		otelapi.WithDescription("count of draining frontend connections"),
+	)
+	if err != nil {
+		return err
+	}
+	FrontendConnectionsDrainingCount = m
+	return nil
+}
+
+func setupFrontendConnectionsEstablishedCount(ctx context.Context) error {
+	m, err := meter.Int64Counter("frontend_connections_established_count",
+		otelapi.WithDescription("counter for network connections established"),
+	)
+	if err != nil {
+		return err
+	}
+	FrontendConnectionsEstablishedCount = m
+	return nil
+}
+
 func setupInfo(ctx context.Context) error {
 	m, err := meter.Int64Counter("info",
 		otelapi.WithDescription("target info metadata (see the labels)"),
@@ -98,29 +145,14 @@ func setupInfo(ctx context.Context) error {
 	return nil
 }
 
-func setupRequestSize(ctx context.Context) error {
-	m, err := meter.Int64Histogram("request_size",
-		otelapi.WithDescription("sizes of incoming requests"),
-		otelapi.WithExplicitBucketBoundaries(0, 1, 16, 256, 4096, 65536, 1048576, 16777216, 268435456, 68719476736),
-		otelapi.WithUnit("By"),
+func setupLateFCUCount(ctx context.Context) error {
+	m, err := meter.Int64Counter("late_fcu_count",
+		otelapi.WithDescription("count of late fcu messages"),
 	)
 	if err != nil {
 		return err
 	}
-	RequestSize = m
-	return nil
-}
-
-func setupResponseSize(ctx context.Context) error {
-	m, err := meter.Int64Histogram("response_size",
-		otelapi.WithDescription("sizes of sent responses"),
-		otelapi.WithExplicitBucketBoundaries(0, 1, 16, 256, 4096, 65536, 1048576, 16777216, 268435456, 68719476736),
-		otelapi.WithUnit("By"),
-	)
-	if err != nil {
-		return err
-	}
-	ResponseSize = m
+	LateFCUCount = m
 	return nil
 }
 
@@ -161,39 +193,6 @@ func setupLatencyTotal(ctx context.Context) error {
 	return nil
 }
 
-func setupProxySuccessCount(ctx context.Context) error {
-	m, err := meter.Int64Counter("proxy_success_count",
-		otelapi.WithDescription("count of successfully proxied requests"),
-	)
-	if err != nil {
-		return err
-	}
-	ProxySuccessCount = m
-	return nil
-}
-
-func setupProxyFailureCount(ctx context.Context) error {
-	m, err := meter.Int64Counter("proxy_failure_count",
-		otelapi.WithDescription("count of failures to proxy the request"),
-	)
-	if err != nil {
-		return err
-	}
-	ProxyFailureCount = m
-	return nil
-}
-
-func setupProxyFakeCount(ctx context.Context) error {
-	m, err := meter.Int64Counter("proxy_fake_count",
-		otelapi.WithDescription("count of faked responses to the non-proxied requests"),
-	)
-	if err != nil {
-		return err
-	}
-	ProxyFakeCount = m
-	return nil
-}
-
 func setupMirrorSuccessCount(ctx context.Context) error {
 	m, err := meter.Int64Counter("mirror_success_count",
 		otelapi.WithDescription("count of successfully mirrored requests"),
@@ -227,25 +226,62 @@ func setupMirrorDropCount(ctx context.Context) error {
 	return nil
 }
 
-func setupFrontendConnectionsCount(ctx context.Context) error {
-	m, err := meter.Int64ObservableGauge("frontend_connections_count",
-		otelapi.WithDescription("count of open frontend connections"),
+func setupProxySuccessCount(ctx context.Context) error {
+	m, err := meter.Int64Counter("proxy_success_count",
+		otelapi.WithDescription("count of successfully proxied requests"),
 	)
 	if err != nil {
 		return err
 	}
-	FrontendConnectionsCount = m
+	ProxySuccessCount = m
 	return nil
 }
 
-func setupFrontendDrainingConnectionsCount(ctx context.Context) error {
-	m, err := meter.Int64ObservableGauge("frontend_draining_connections_count",
-		otelapi.WithDescription("count of draining frontend connections"),
+func setupProxyFailureCount(ctx context.Context) error {
+	m, err := meter.Int64Counter("proxy_failure_count",
+		otelapi.WithDescription("count of failures to proxy the request"),
 	)
 	if err != nil {
 		return err
 	}
-	FrontendDrainingConnectionsCount = m
+	ProxyFailureCount = m
+	return nil
+}
+
+func setupProxyFakeCount(ctx context.Context) error {
+	m, err := meter.Int64Counter("proxy_fake_count",
+		otelapi.WithDescription("count of faked responses to the non-proxied requests"),
+	)
+	if err != nil {
+		return err
+	}
+	ProxyFakeCount = m
+	return nil
+}
+
+func setupRequestSize(ctx context.Context) error {
+	m, err := meter.Int64Histogram("request_size",
+		otelapi.WithDescription("sizes of incoming requests"),
+		otelapi.WithExplicitBucketBoundaries(0, 1, 16, 256, 4096, 65536, 1048576, 16777216, 268435456, 68719476736),
+		otelapi.WithUnit("By"),
+	)
+	if err != nil {
+		return err
+	}
+	RequestSize = m
+	return nil
+}
+
+func setupResponseSize(ctx context.Context) error {
+	m, err := meter.Int64Histogram("response_size",
+		otelapi.WithDescription("sizes of sent responses"),
+		otelapi.WithExplicitBucketBoundaries(0, 1, 16, 256, 4096, 65536, 1048576, 16777216, 268435456, 68719476736),
+		otelapi.WithUnit("By"),
+	)
+	if err != nil {
+		return err
+	}
+	ResponseSize = m
 	return nil
 }
 
@@ -268,16 +304,5 @@ func setupTLSValidNotBefore(ctx context.Context) error {
 		return err
 	}
 	TLSValidNotBefore = m
-	return nil
-}
-
-func setupLateFCUCount(ctx context.Context) error {
-	m, err := meter.Int64Counter("late_fcu_count",
-		otelapi.WithDescription("count of late fcu messages"),
-	)
-	if err != nil {
-		return err
-	}
-	LateFCUCount = m
 	return nil
 }

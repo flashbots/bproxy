@@ -5,28 +5,30 @@ import (
 )
 
 var (
+	FrontendConnectionsActiveCount      otelapi.Int64ObservableGauge
+	FrontendConnectionsClosedCount      otelapi.Int64Counter
+	FrontendConnectionsDrainingCount    otelapi.Int64ObservableGauge
+	FrontendConnectionsEstablishedCount otelapi.Int64Counter
+
 	Info otelapi.Int64Counter
 
-	RequestSize  otelapi.Int64Histogram
-	ResponseSize otelapi.Int64Histogram
+	LateFCUCount otelapi.Int64Counter
 
 	LatencyAuthrpcJwt *Int64Candlestick
 	LatencyBackend    otelapi.Int64Histogram
 	LatencyTotal      otelapi.Int64Histogram
 
-	ProxySuccessCount otelapi.Int64Counter
-	ProxyFailureCount otelapi.Int64Counter
-	ProxyFakeCount    otelapi.Int64Counter
-
 	MirrorSuccessCount otelapi.Int64Counter
 	MirrorFailureCount otelapi.Int64Counter
 	MirrorDropCount    otelapi.Int64Counter
 
-	FrontendConnectionsCount         otelapi.Int64ObservableGauge
-	FrontendDrainingConnectionsCount otelapi.Int64ObservableGauge
+	ProxySuccessCount otelapi.Int64Counter
+	ProxyFailureCount otelapi.Int64Counter
+	ProxyFakeCount    otelapi.Int64Counter
+
+	RequestSize  otelapi.Int64Histogram
+	ResponseSize otelapi.Int64Histogram
 
 	TLSValidNotAfter  otelapi.Int64ObservableGauge
 	TLSValidNotBefore otelapi.Int64ObservableGauge
-
-	LateFCUCount otelapi.Int64Counter
 )

@@ -174,7 +174,7 @@ func (p *Websocket) Observe(ctx context.Context, o otelapi.Observer) error {
 		return nil
 	}
 
-	o.ObserveInt64(metrics.FrontendConnectionsCount, int64(p.connectionsCount()), otelapi.WithAttributes(
+	o.ObserveInt64(metrics.FrontendConnectionsActiveCount, int64(p.connectionsCount()), otelapi.WithAttributes(
 		attribute.KeyValue{Key: "proxy", Value: attribute.StringValue(p.cfg.name)},
 	))
 
@@ -335,6 +335,9 @@ func (p *Websocket) upstreamConnectionChanged(conn net.Conn, state fasthttp.Conn
 	switch state {
 	case fasthttp.StateNew:
 		l.Info("Upstream connection was established")
+		metrics.FrontendConnectionsEstablishedCount.Add(context.TODO(), 1, otelapi.WithAttributes(
+			attribute.KeyValue{Key: "proxy", Value: attribute.StringValue(p.cfg.name)},
+		))
 		p.connections[addr] = conn
 
 	case fasthttp.StateActive:
@@ -349,6 +352,9 @@ func (p *Websocket) upstreamConnectionChanged(conn net.Conn, state fasthttp.Conn
 
 	case fasthttp.StateClosed:
 		l.Info("Upstream connection was closed")
+		metrics.FrontendConnectionsClosedCount.Add(context.TODO(), 1, otelapi.WithAttributes(
+			attribute.KeyValue{Key: "proxy", Value: attribute.StringValue(p.cfg.name)},
+		))
 		delete(p.connections, addr)
 	}
 }

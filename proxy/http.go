@@ -334,11 +334,11 @@ func (p *HTTP) Observe(ctx context.Context, o otelapi.Observer) error {
 	p.mxConnections.Lock()
 	defer p.mxConnections.Unlock()
 
-	o.ObserveInt64(metrics.FrontendConnectionsCount, int64(p.frontend.GetOpenConnectionsCount()), otelapi.WithAttributes(
+	o.ObserveInt64(metrics.FrontendConnectionsActiveCount, int64(p.frontend.GetOpenConnectionsCount()), otelapi.WithAttributes(
 		attribute.KeyValue{Key: "proxy", Value: attribute.StringValue(p.cfg.name)},
 	))
 
-	o.ObserveInt64(metrics.FrontendDrainingConnectionsCount, int64(len(p.drainingConnections)), otelapi.WithAttributes(
+	o.ObserveInt64(metrics.FrontendConnectionsDrainingCount, int64(len(p.drainingConnections)), otelapi.WithAttributes(
 		attribute.KeyValue{Key: "proxy", Value: attribute.StringValue(p.cfg.name)},
 	))
 
@@ -804,6 +804,9 @@ func (p *HTTP) upstreamConnectionChanged(conn net.Conn, state fasthttp.ConnState
 	switch state {
 	case fasthttp.StateNew:
 		l.Info("Upstream connection was established")
+		metrics.FrontendConnectionsEstablishedCount.Add(context.TODO(), 1, otelapi.WithAttributes(
+			attribute.KeyValue{Key: "proxy", Value: attribute.StringValue(p.cfg.name)},
+		))
 		p.connections[addr] = conn
 
 	case fasthttp.StateActive:
@@ -827,6 +830,9 @@ func (p *HTTP) upstreamConnectionChanged(conn net.Conn, state fasthttp.ConnState
 
 	case fasthttp.StateClosed:
 		l.Info("Upstream connection was closed")
+		metrics.FrontendConnectionsClosedCount.Add(context.TODO(), 1, otelapi.WithAttributes(
+			attribute.KeyValue{Key: "proxy", Value: attribute.StringValue(p.cfg.name)},
+		))
 		delete(p.connections, addr)
 		delete(p.drainingConnections, addr)
 	}
