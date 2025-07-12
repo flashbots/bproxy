@@ -392,10 +392,15 @@ func (p *Websocket) closeWebsocket(conn *websocket.Conn, reason error) error {
 		)
 	}
 
+	msg := []byte(reason.Error())
+	if len(msg) > 125 {
+		// maxControlFramePayloadSize == 125
+		msg = msg[:125]
+	}
+
 	return errors.Join(
 		conn.WriteControl(
-			// maxControlFramePayloadSize == 125
-			websocket.CloseMessage, []byte(reason.Error())[:125], utils.Deadline(p.cfg.proxy.ControlTimeout),
+			websocket.CloseMessage, msg, utils.Deadline(p.cfg.proxy.ControlTimeout),
 		),
 		conn.Close(),
 	)
