@@ -39,7 +39,13 @@ func decodeEthSendRawTransaction(params json.RawMessage) (
 		)
 	}
 
-	bytes, err := hexutil.Decode(inputs[0])
+	return DecodeEthRawTransaction(inputs[0])
+}
+
+func DecodeEthRawTransaction(str string) (
+	addr ethcommon.Address, tx *ethtypes.Transaction, err error,
+) {
+	bytes, err := hexutil.Decode(str)
 	if err != nil {
 		return ethcommon.Address{}, nil, fmt.Errorf("%w: %w",
 			errFailedToDecodeEthSendRawTransaction, err,
@@ -53,18 +59,22 @@ func decodeEthSendRawTransaction(params json.RawMessage) (
 		)
 	}
 
-	if tx.ChainId() == nil || tx.ChainId().Sign() <= 0 {
-		return ethcommon.Address{}, nil, fmt.Errorf("%w: invalid chain id: %v",
-			errFailedToDecodeEthSendRawTransaction, tx.ChainId(),
-		)
-	}
+	switch tx.Type() {
+	case ethtypes.DepositTxType:
+		return tx.From(), tx, nil
 
-	from, err := ethtypes.Sender(ethtypes.LatestSignerForChainID(tx.ChainId()), tx)
-	if err != nil {
-		return ethcommon.Address{}, nil, fmt.Errorf("%w: %w",
-			errFailedToDecodeEthSendRawTransaction, err,
-		)
+	default:
+		if tx.ChainId() == nil || tx.ChainId().Sign() <= 0 {
+			return ethcommon.Address{}, nil, fmt.Errorf("%w: invalid chain id: %v",
+				errFailedToDecodeEthSendRawTransaction, tx.ChainId(),
+			)
+		}
+		from, err := ethtypes.Sender(ethtypes.LatestSignerForChainID(tx.ChainId()), tx)
+		if err != nil {
+			return ethcommon.Address{}, nil, fmt.Errorf("%w: %w",
+				errFailedToDecodeEthSendRawTransaction, err,
+			)
+		}
+		return from, tx, nil
 	}
-
-	return from, tx, nil
 }

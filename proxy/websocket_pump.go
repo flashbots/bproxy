@@ -10,7 +10,10 @@ import (
 	"time"
 
 	"github.com/fasthttp/websocket"
+	"github.com/flashbots/bproxy/flashblock"
+	"github.com/flashbots/bproxy/jrpc"
 	"github.com/flashbots/bproxy/metrics"
+	"github.com/flashbots/bproxy/triaged"
 	"github.com/flashbots/bproxy/utils"
 	"go.opentelemetry.io/otel/attribute"
 	otelapi "go.opentelemetry.io/otel/metric"
@@ -250,17 +253,48 @@ func (p *websocketPump) prepareLogFields(
 		zap.Int("message_size", len(m.bytes)),
 	)
 
-	if p.cfg.proxy.LogMessages && len(m.bytes) <= p.cfg.proxy.LogMessagesMaxSize {
-		var jsonMessage interface{}
-		if err := json.Unmarshal(m.bytes, &jsonMessage); err == nil {
-			loggedFields = append(loggedFields,
-				zap.Any("json_message", jsonMessage),
-			)
-		} else {
-			loggedFields = append(loggedFields,
-				zap.NamedError("error_unmarshal", err),
-				zap.String("websocket_message", utils.Str(m.bytes)),
-			)
+	if p.cfg.proxy.LogMessages {
+		fb := flashblock.Flashblock{}
+		err := json.Unmarshal(m.bytes, &fb)
+
+		if len(m.bytes) <= p.cfg.proxy.LogMessagesMaxSize {
+			if err == nil {
+				loggedFields = append(loggedFields,
+					zap.Any("json_message", fb),
+				)
+			} else {
+				loggedFields = append(loggedFields,
+					zap.NamedError("error_unmarshal", err),
+					zap.String("websocket_message", utils.Str(m.bytes)),
+				)
+			}
+		}
+
+		transactions := make(triaged.RequestTransactions, 0, len(fb.Diff.Transactions))
+		for _, strTx := range fb.Diff.Transactions {
+			errs := make([]error, 0)
+			if from, tx, err := jrpc.DecodeEthRawTransaction(strTx); err == nil {
+				transactions = append(transactions, triaged.RequestTransaction{
+					From:  &from,
+					To:    tx.To(),
+					Hash:  tx.Hash(),
+					Nonce: tx.Nonce(),
+				})
+			} else {
+				_, _, err := jrpc.DecodeEthRawTransaction(strTx)
+				errs = append(errs, err)
+			}
+
+			if len(transactions) > 0 {
+				loggedFields = append(loggedFields,
+					zap.Array("txs", transactions),
+				)
+			}
+			if len(errs) > 0 {
+				loggedFields = append(loggedFields,
+					zap.Errors("error_decode", errs),
+				)
+			}
 		}
 	}
 
