@@ -32,7 +32,8 @@ type Authrpc struct {
 }
 
 type authrpcConfig struct {
-	deduplicateFCUs bool
+	deduplicateFCUs  bool
+	mirrorGetPayload bool
 }
 
 func NewAuthrpc(
@@ -53,7 +54,8 @@ func NewAuthrpc(
 		tickerSeenHeads: time.NewTicker(30 * time.Second),
 
 		cfg: &authrpcConfig{
-			deduplicateFCUs: cfg.DeduplicateFCUs,
+			deduplicateFCUs:  cfg.DeduplicateFCUs,
+			mirrorGetPayload: cfg.MirrorGetPayload,
 		},
 	}
 	ap.proxy.triage = ap.triage
@@ -151,6 +153,7 @@ func (p *Authrpc) triage(ctx *fasthttp.RequestCtx) (
 		return &triaged.Request{
 			Proxy:      true,
 			Prioritise: true,
+			Mirror:     p.cfg.mirrorGetPayload,
 			JrpcID:     call.GetID(),
 			JrpcMethod: call.GetMethod(),
 		}, fasthttp.AcquireResponse()

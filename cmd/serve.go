@@ -318,6 +318,14 @@ func CommandServe(cfg *config.Config) *cli.Command {
 			Name:        categoryAuthrpc + "-deduplicate-fcus",
 			Usage:       "deduplicate repetitive fcu messages",
 		},
+
+		&cli.BoolFlag{ // --authrpc-mirror-get-payload
+			Category:    strings.ToUpper(categoryAuthrpc),
+			Destination: &cfg.Authrpc.MirrorGetPayload,
+			EnvVars:     []string{envPrefix + strings.ToUpper(categoryAuthrpc) + "_MIRROR_GET_PAYLOAD"},
+			Name:        categoryAuthrpc + "-mirror-get-payload",
+			Usage:       "mirror getPayload calls as well",
+		},
 	)
 
 	flashblocksFlags := []cli.Flag{ // --flashblocks-xxx
