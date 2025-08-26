@@ -11,7 +11,12 @@ RUN go mod download
 
 COPY . .
 
-RUN go build -o bin/bproxy -ldflags "-s -w" github.com/flashbots/bproxy/cmd
+ARG SOURCE_DATE_EPOCH=0
+RUN CGO_ENABLED=0 go build \
+    -trimpath \
+    -ldflags "-s -w -buildid=" \
+    -o bin/bproxy \
+    github.com/flashbots/bproxy/cmd
 
 # stage: run -----------------------------------------------------------
 
