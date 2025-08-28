@@ -32,8 +32,12 @@ type Authrpc struct {
 }
 
 type authrpcConfig struct {
-	deduplicateFCUs  bool
-	mirrorGetPayload bool
+	deduplicateFCUs         bool
+	mirrorFcuWithoutPayload bool
+	mirrorFcuWithPayload    bool
+	mirrorGetPayload        bool
+	mirrorNewPayload        bool
+	mirrorSetMaxDASize      bool
 }
 
 func NewAuthrpc(
@@ -54,8 +58,12 @@ func NewAuthrpc(
 		tickerSeenHeads: time.NewTicker(30 * time.Second),
 
 		cfg: &authrpcConfig{
-			deduplicateFCUs:  cfg.DeduplicateFCUs,
-			mirrorGetPayload: cfg.MirrorGetPayload,
+			deduplicateFCUs:         cfg.DeduplicateFCUs,
+			mirrorFcuWithoutPayload: cfg.MirrorFcuWithoutPayload,
+			mirrorFcuWithPayload:    cfg.MirrorFcuWithPayload,
+			mirrorGetPayload:        cfg.MirrorGetPayload,
+			mirrorNewPayload:        cfg.MirrorNewPayload,
+			mirrorSetMaxDASize:      cfg.MirrorSetMaxDASize,
 		},
 	}
 	ap.proxy.triage = ap.triage
@@ -149,7 +157,7 @@ func (p *Authrpc) triage(ctx *fasthttp.RequestCtx) (
 			JrpcMethod: call.GetMethod(),
 		}, fasthttp.AcquireResponse()
 
-	case strings.HasPrefix(call.GetMethod(), "engine_getPayload"): // proxy with priority
+	case strings.HasPrefix(call.GetMethod(), "engine_getPayload"):
 		return &triaged.Request{
 			Proxy:      true,
 			Prioritise: true,
@@ -158,19 +166,19 @@ func (p *Authrpc) triage(ctx *fasthttp.RequestCtx) (
 			JrpcMethod: call.GetMethod(),
 		}, fasthttp.AcquireResponse()
 
-	case strings.HasPrefix(call.GetMethod(), "engine_newPayload"): // proxy & mirror with priority
+	case strings.HasPrefix(call.GetMethod(), "engine_newPayload"):
 		return &triaged.Request{
 			Proxy:      true,
 			Prioritise: true,
-			Mirror:     true,
+			Mirror:     p.cfg.mirrorNewPayload,
 			JrpcID:     call.GetID(),
 			JrpcMethod: call.GetMethod(),
 		}, fasthttp.AcquireResponse()
 
-	case strings.HasPrefix(call.GetMethod(), "miner_setMaxDASize"): // proxy & mirror
+	case strings.HasPrefix(call.GetMethod(), "miner_setMaxDASize"):
 		return &triaged.Request{
 			Proxy:      true,
-			Mirror:     true,
+			Mirror:     p.cfg.mirrorSetMaxDASize,
 			JrpcID:     call.GetID(),
 			JrpcMethod: call.GetMethod(),
 		}, fasthttp.AcquireResponse()
@@ -183,7 +191,7 @@ func (p *Authrpc) triage(ctx *fasthttp.RequestCtx) (
 			)
 			return &triaged.Request{
 				Proxy:      true,
-				Mirror:     true,
+				Mirror:     p.cfg.mirrorFcuWithoutPayload,
 				JrpcID:     call.GetID(),
 				JrpcMethod: call.GetMethod(),
 			}, fasthttp.AcquireResponse()
@@ -207,7 +215,7 @@ func (p *Authrpc) triage(ctx *fasthttp.RequestCtx) (
 					return &triaged.Request{
 						Proxy:      true,
 						Prioritise: true,
-						Mirror:     true,
+						Mirror:     p.cfg.mirrorFcuWithoutPayload,
 						Deadline:   blockTimestamp,
 						JrpcID:     call.GetID(),
 						JrpcMethod: call.GetMethod() + "_withPayload",
@@ -225,7 +233,7 @@ func (p *Authrpc) triage(ctx *fasthttp.RequestCtx) (
 			return &triaged.Request{
 				Proxy:      true,
 				Prioritise: true,
-				Mirror:     true,
+				Mirror:     p.cfg.mirrorFcuWithPayload,
 				JrpcID:     call.GetID(),
 				JrpcMethod: call.GetMethod() + "_withPayload",
 			}, fasthttp.AcquireResponse()
