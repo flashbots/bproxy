@@ -571,7 +571,7 @@ func (p *HTTP) execProxyJob(job *proxyJob) {
 		switch utils.Str(job.req.Header.ContentType()) {
 		case "application/json":
 			job.res.SetStatusCode(fasthttp.StatusAccepted)
-			job.res.SetBody([]byte(fmt.Sprintf(`{"jsonrpc":"2.0","error":{"code":-32042,"message":%s}}`, strconv.Quote(err.Error()))))
+			job.res.SetBody([]byte(fmt.Sprintf(`{"jsonrpc":"2.0","id":%s,"error":{"code":-32042,"message":%s}}`, job.triage.JrpcID, strconv.Quote(err.Error()))))
 		default:
 			job.res.SetBody([]byte(err.Error()))
 			job.res.SetStatusCode(fasthttp.StatusBadGateway)
