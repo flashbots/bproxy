@@ -319,12 +319,44 @@ func CommandServe(cfg *config.Config) *cli.Command {
 			Usage:       "deduplicate repetitive fcu messages",
 		},
 
+		&cli.BoolFlag{ // --authrpc-mirror-fcu-without-payload
+			Category:    strings.ToUpper(categoryAuthrpc),
+			Destination: &cfg.Authrpc.MirrorFcuWithoutPayload,
+			EnvVars:     []string{envPrefix + strings.ToUpper(categoryAuthrpc) + "_MIRROR_FCU_WITHOUT_PAYLOAD"},
+			Name:        categoryAuthrpc + "-mirror-fcu-without-payload",
+			Usage:       "mirror engine_forkchoiceUpdated calls that do not carry execution payload",
+		},
+
+		&cli.BoolFlag{ // --authrpc-mirror-fcu-with-payload
+			Category:    strings.ToUpper(categoryAuthrpc),
+			Destination: &cfg.Authrpc.MirrorFcuWithPayload,
+			EnvVars:     []string{envPrefix + strings.ToUpper(categoryAuthrpc) + "_MIRROR_FCU_WITH_PAYLOAD"},
+			Name:        categoryAuthrpc + "-mirror-fcu-with-payload",
+			Usage:       "mirror engine_forkchoiceUpdated calls that carry execution payload",
+		},
+
 		&cli.BoolFlag{ // --authrpc-mirror-get-payload
 			Category:    strings.ToUpper(categoryAuthrpc),
 			Destination: &cfg.Authrpc.MirrorGetPayload,
 			EnvVars:     []string{envPrefix + strings.ToUpper(categoryAuthrpc) + "_MIRROR_GET_PAYLOAD"},
 			Name:        categoryAuthrpc + "-mirror-get-payload",
-			Usage:       "mirror getPayload calls as well",
+			Usage:       "mirror engine_getPayload calls",
+		},
+
+		&cli.BoolFlag{ // --authrpc-mirror-new-payload
+			Category:    strings.ToUpper(categoryAuthrpc),
+			Destination: &cfg.Authrpc.MirrorNewPayload,
+			EnvVars:     []string{envPrefix + strings.ToUpper(categoryAuthrpc) + "_MIRROR_NEW_PAYLOAD"},
+			Name:        categoryAuthrpc + "-mirror-new-payload",
+			Usage:       "mirror engine_newPayload calls",
+		},
+
+		&cli.BoolFlag{ // --authrpc-mirror-set-max-da-size
+			Category:    strings.ToUpper(categoryAuthrpc),
+			Destination: &cfg.Authrpc.MirrorSetMaxDASize,
+			EnvVars:     []string{envPrefix + strings.ToUpper(categoryAuthrpc) + "_MIRROR_SET_MAX_DA_SIZE"},
+			Name:        categoryAuthrpc + "-mirror-set-max-da-size",
+			Usage:       "mirror miner_setMaxDASize calls",
 		},
 	)
 
