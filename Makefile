@@ -3,8 +3,9 @@ VERSION := $(VERSION:v%=%)
 
 .PHONY: build
 build:
-	@CGO_ENABLED=0 go build \
-			-ldflags "-X main.version=${VERSION}" \
+	@CGO_ENABLED=0 SOURCE_DATE_EPOCH=0 go build \
+			-trimpath \
+			-ldflags "-s -w -X main.version=${VERSION} -buildid=" \
 			-o ./bin/bproxy \
 		github.com/flashbots/bproxy/cmd
 

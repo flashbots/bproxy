@@ -7,6 +7,9 @@ builds:
       - -s
       - -w
       - -X main.version={{ .Version }}
+      - -buildid=
+    flags:
+      - -trimpath
     targets:
       - linux_amd64
       - linux_arm64
