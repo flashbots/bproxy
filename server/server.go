@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"net/http/pprof"
 	"os"
 	"os/signal"
 	"syscall"
@@ -64,17 +65,31 @@ func New(cfg *config.Config) (*Server, error) {
 		s.rpc = rpc
 	}
 
-	mux := http.NewServeMux()
-	mux.Handle("/", promhttp.Handler())
-	mux.Handle("/metrics", promhttp.Handler())
+	{
+		mux := http.NewServeMux()
+		mux.Handle("/", promhttp.Handler())
+		mux.Handle("/metrics", promhttp.Handler())
 
-	s.metrics = &http.Server{
-		Addr:              cfg.Metrics.ListenAddress,
-		Handler:           mux,
-		MaxHeaderBytes:    1024,
-		ReadHeaderTimeout: 30 * time.Second,
-		ReadTimeout:       30 * time.Second,
-		WriteTimeout:      30 * time.Second,
+		s.metrics = &http.Server{
+			Addr:              cfg.Metrics.ListenAddress,
+			Handler:           mux,
+			MaxHeaderBytes:    1024,
+			ReadHeaderTimeout: 30 * time.Second,
+			ReadTimeout:       30 * time.Second,
+			WriteTimeout:      30 * time.Second,
+		}
+	}
+
+	if cfg.Pprof.ListenAddress != "" {
+		go func() {
+			mux := http.NewServeMux()
+			mux.HandleFunc("/debug/pprof/", pprof.Index)
+			mux.HandleFunc("/debug/pprof/cmdline", pprof.Cmdline)
+			mux.HandleFunc("/debug/pprof/profile", pprof.Profile)
+			mux.HandleFunc("/debug/pprof/symbol", pprof.Symbol)
+			mux.HandleFunc("/debug/pprof/trace", pprof.Trace)
+			_ = http.ListenAndServe(cfg.Pprof.ListenAddress, mux)
+		}()
 	}
 
 	return s, nil

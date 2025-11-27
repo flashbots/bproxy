@@ -12,6 +12,7 @@ type Config struct {
 
 	Log     *Log     `yaml:"log"`
 	Metrics *Metrics `yaml:"metrics"`
+	Pprof   *Pprof   `yaml:"pprof"`
 	Version string   `yaml:"-"`
 }
 
@@ -19,6 +20,7 @@ func New(version string) *Config {
 	return &Config{
 		Log:     &Log{},
 		Metrics: &Metrics{},
+		Pprof:   &Pprof{},
 		Version: version,
 
 		Authrpc: &Authrpc{HttpProxy: &HttpProxy{

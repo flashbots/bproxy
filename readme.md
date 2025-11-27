@@ -84,6 +84,10 @@ OPTIONS:
 
    --metrics-listen-address host:port  host:port for metrics server (default: "0.0.0.0:6785") [$BPROXY_METRICS_LISTEN_ADDRESS]
 
+   PPROF
+
+   --pprof-listen-address host:port  host:port for pprof server [$BPROXY_PPROF_LISTEN_ADDRESS]
+
    RPC
 
    --rpc-backend url                                                                        url of rpc backend (default: "http://127.0.0.1:18545") [$BPROXY_RPC_BACKEND]

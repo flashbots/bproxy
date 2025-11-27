@@ -12,11 +12,12 @@ import (
 )
 
 const (
-	categoryChaos       = "chaos"
 	categoryAuthrpc     = "authrpc"
+	categoryChaos       = "chaos"
 	categoryFlashblocks = "flashblocks"
-	categoryRPC         = "rpc"
 	categoryMetrics     = "metrics"
+	categoryPprof       = "pprof"
+	categoryRPC         = "rpc"
 )
 
 func CommandServe(cfg *config.Config) *cli.Command {
@@ -542,11 +543,22 @@ func CommandServe(cfg *config.Config) *cli.Command {
 		},
 	}
 
+	pprofFlags := []cli.Flag{ // --pprof-xxx
+		&cli.StringFlag{ // --pprof-listen-address
+			Category:    strings.ToUpper(categoryPprof),
+			Destination: &cfg.Pprof.ListenAddress,
+			EnvVars:     []string{envPrefix + strings.ToUpper(categoryPprof) + "_LISTEN_ADDRESS"},
+			Name:        categoryPprof + "-listen-address",
+			Usage:       "`host:port` for pprof server",
+		},
+	}
+
 	flags := slices.Concat(
 		authrpcFlags,
 		flashblocksFlags,
-		rpcFlags,
 		metricsFlags,
+		pprofFlags,
+		rpcFlags,
 	)
 
 	return &cli.Command{
