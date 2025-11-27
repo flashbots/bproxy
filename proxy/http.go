@@ -361,7 +361,7 @@ func (p *HTTP) Observe(ctx context.Context, o otelapi.Observer) error {
 
 func (p *HTTP) newProxyJob(ctx *fasthttp.RequestCtx) *proxyJob {
 	job := &proxyJob{
-		tsReqReceived: ctx.Time(),
+		tsReqReceived: time.Now(),
 		wg:            &sync.WaitGroup{},
 	}
 
