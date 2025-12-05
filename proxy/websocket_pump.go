@@ -165,13 +165,13 @@ func (p *websocketPump) pumpMessages(
 			default:
 				if err := from.SetReadDeadline(utils.Deadline(timeout)); err != nil {
 					notifyOnFailure(err)
-					continue
+					return
 				}
 
 				msgType, bytes, err := from.ReadMessage()
 				if err != nil {
 					notifyOnFailure(err)
-					continue
+					return
 				}
 
 				messages <- &websocketMessage{
