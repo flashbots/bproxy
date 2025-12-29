@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"math/rand/v2"
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -146,10 +147,19 @@ func (p *websocketPump) pumpMessages(
 	doneWrites := make(chan struct{}, 1)
 
 	notifyOnFailure := func(err error) {
+		if err == nil {
+			return
+		}
+
 		select {
 		case failure <- err:
-			// no-op
+			return
+
 		default:
+			if strings.Contains(err.Error(), "use of closed network connection") {
+				return
+			}
+
 			l.Warn("Dropping websocket pump failure b/c the channel is full",
 				zap.Error(err),
 			)
