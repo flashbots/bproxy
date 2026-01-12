@@ -26,6 +26,7 @@ type HttpProxy struct {
 	LogRequestsMaxSize              int           `yaml:"log_requests_max_size"`
 	LogResponses                    bool          `yaml:"log_responses"`
 	LogResponsesMaxSize             int           `yaml:"log_responses_max_size"`
+	LogMethods                      []string      `yaml:"log_methods"`
 	MaxBackendConnectionsPerHost    int           `yaml:"max_backend_connections_per_host"`
 	MaxBackendConnectionWaitTimeout time.Duration `yaml:"max_client_connection_wait_timeout"`
 	MaxClientConnectionsPerIP       int           `yaml:"max_client_connections_per_ip"`
