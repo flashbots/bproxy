@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/flashbots/bproxy/config"
+	"github.com/flashbots/bproxy/jrpc"
 	"github.com/flashbots/bproxy/logutils"
 	"github.com/flashbots/bproxy/metrics"
 	"github.com/flashbots/bproxy/triaged"
@@ -606,8 +607,9 @@ func (p *HTTP) execProxyJob(job *proxyJob) {
 
 	{ // add log fields
 		if p.cfg.proxy.LogRequests && len(job.req.Body()) <= p.cfg.proxy.LogRequestsMaxSize && p.shouldLogMethod(job.triage.JrpcMethod) {
-			var jsonRequest interface{}
+			var jsonRequest any
 			if err := json.Unmarshal(job.req.Body(), &jsonRequest); err == nil {
+				jrpc.Sanitize(jsonRequest)
 				loggedFields = append(loggedFields,
 					zap.Any("json_request", jsonRequest),
 				)
@@ -635,8 +637,9 @@ func (p *HTTP) execProxyJob(job *proxyJob) {
 			}
 
 			if body != nil {
-				var jsonResponse interface{}
+				var jsonResponse any
 				if err := json.Unmarshal(body, &jsonResponse); err == nil {
+					jrpc.Sanitize(jsonResponse)
 					loggedFields = append(loggedFields,
 						zap.Any("json_response", jsonResponse),
 					)
@@ -695,8 +698,9 @@ func (p *HTTP) execMirrorJob(job *mirrorJob) {
 		)
 
 		if p.cfg.proxy.LogRequests && len(job.req.Body()) <= p.cfg.proxy.LogRequestsMaxSize && p.shouldLogMethod(job.jrpcMethodForMetrics) {
-			var jsonRequest interface{}
+			var jsonRequest any
 			if err := json.Unmarshal(job.req.Body(), &jsonRequest); err == nil {
+				jrpc.Sanitize(jsonRequest)
 				loggedFields = append(loggedFields,
 					zap.Any("json_request", jsonRequest),
 				)
@@ -715,8 +719,9 @@ func (p *HTTP) execMirrorJob(job *mirrorJob) {
 			if p.cfg.proxy.LogResponses && len(job.res.Body()) <= p.cfg.proxy.LogResponsesMaxSize && p.shouldLogMethod(job.jrpcMethodForMetrics) {
 				switch utils.Str(job.res.Header.ContentEncoding()) {
 				default:
-					var jsonResponse interface{}
+					var jsonResponse any
 					if err := json.Unmarshal(job.res.Body(), &jsonResponse); err == nil {
+						jrpc.Sanitize(jsonResponse)
 						loggedFields = append(loggedFields,
 							zap.Any("json_response", jsonResponse),
 						)
@@ -728,8 +733,9 @@ func (p *HTTP) execMirrorJob(job *mirrorJob) {
 
 				case "gzip":
 					if body, err := job.res.BodyGunzip(); err == nil {
-						var jsonResponse interface{}
+						var jsonResponse any
 						if err := json.Unmarshal(body, &jsonResponse); err == nil {
+							jrpc.Sanitize(jsonResponse)
 							loggedFields = append(loggedFields,
 								zap.Any("json_response", jsonResponse),
 							)
