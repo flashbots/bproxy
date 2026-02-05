@@ -22,6 +22,7 @@ type HttpProxy struct {
 	ExtraMirroredJrpcMethods        []string      `yaml:"extra_mirrored_jrpc_methods"`
 	Healthcheck                     *Healthcheck  `yaml:"healthcheck"`
 	ListenAddress                   string        `yaml:"listen_address"`
+	LogMethods                      []string      `yaml:"log_methods"`
 	LogRequests                     bool          `yaml:"log_requests"`
 	LogRequestsMaxSize              int           `yaml:"log_requests_max_size"`
 	LogResponses                    bool          `yaml:"log_responses"`
