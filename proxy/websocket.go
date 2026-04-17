@@ -229,13 +229,6 @@ func (p *Websocket) receive(ctx *fasthttp.RequestCtx) {
 	)
 	defer l.Sync() //nolint:errcheck
 
-	if !p.healthcheck.IsHealthy() {
-		ctx.Error("unhealthy", fasthttp.StatusServiceUnavailable)
-		ctx.SetConnectionClose()
-		l.Warn("Refusing the connection b/c backend is (still) unhealthy")
-		return
-	}
-
 	if strings.ToLower(string(ctx.Request.Header.Peek("connection"))) != "upgrade" {
 		ctx.Response.SetStatusCode(fasthttp.StatusUpgradeRequired)
 		ctx.SetConnectionClose()

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"math/rand/v2"
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -41,13 +42,12 @@ func newWebsocketPump(
 		frontend: frontend,
 		backend:  backend,
 		logger:   logger,
-		done:     make(chan struct{}),
+		done:     make(chan struct{}, 1),
 	}
 }
 
 func (p *websocketPump) run() error {
 	failure := make(chan error, 2)
-	done := make(chan struct{}, 2)
 
 	p.frontend.SetPingHandler(p.pumpPings(p.frontend, p.backend, "f->b"))
 	p.backend.SetPongHandler(p.pumpPongs(p.backend, p.frontend, "b->f"))
@@ -58,44 +58,57 @@ func (p *websocketPump) run() error {
 	p.frontend.SetCloseHandler(p.pumpCloseMessages(p.frontend, p.backend, "f->b"))
 	p.backend.SetCloseHandler(p.pumpCloseMessages(p.backend, p.frontend, "b->f"))
 
-	go p.pumpMessages(p.backend, p.frontend, p.cfg.proxy.ForwardTimeout, "b->f", done, failure)
-	go p.pumpMessages(p.frontend, p.backend, p.cfg.proxy.BackwardTimeout, "f->b", done, failure)
+	doneForward := make(chan struct{}, 1)
+	go p.pumpMessages(p.backend, p.frontend, p.cfg.proxy.ForwardTimeout, "b->f", doneForward, failure)
+
+	doneReverse := make(chan struct{}, 1)
+	go p.pumpMessages(p.frontend, p.backend, p.cfg.proxy.BackwardTimeout, "f->b", doneReverse, failure)
 
 	p.active.Store(true)
 
+	errs := make([]error, 0)
+
+loop:
 	for {
 		select {
 		case <-p.done:
-			done <- struct{}{}
 			p.active.Store(false)
-			return nil
+			doneForward <- struct{}{}
+			doneReverse <- struct{}{}
+			break loop
 
 		case err := <-failure:
-			errs := make([]error, 0, 2)
 			errs = append(errs, err)
-
-		exhaustErrs:
-			for {
-				select {
-				case err := <-failure:
-					errs = append(errs, err)
-				default:
-					break exhaustErrs
-				}
-			}
-			err = utils.FlattenErrors(errs)
-
-			done <- struct{}{}
-			p.active.Store(false)
-			return err
+			break loop
 		}
 	}
+
+exhaustErrors:
+	for {
+		select {
+		case err := <-failure:
+			errs = append(errs, err)
+		default:
+			break exhaustErrors
+		}
+	}
+
+	return utils.FlattenErrors(errs)
 }
 
 func (p *websocketPump) stop() error {
-	p.done <- struct{}{}
+	if !p.active.Load() {
+		return nil // already stopped
+	}
 
 	errs := make([]error, 0)
+
+	select {
+	case p.done <- struct{}{}:
+		// no-op
+	default:
+		errs = append(errs, errors.New("double-closing the pump"))
+	}
 
 	countdown := 60
 	for p.active.Load() && countdown > 0 {
@@ -130,8 +143,28 @@ func (p *websocketPump) pumpMessages(
 	)
 
 	messages := make(chan *websocketMessage, 16)
-	doneReads := make(chan struct{})
-	doneWrites := make(chan struct{})
+	doneReads := make(chan struct{}, 1)
+	doneWrites := make(chan struct{}, 1)
+
+	notifyOnFailure := func(err error) {
+		if err == nil {
+			return
+		}
+
+		select {
+		case failure <- err:
+			return
+
+		default:
+			if strings.Contains(err.Error(), "use of closed network connection") {
+				return
+			}
+
+			l.Warn("Dropping websocket pump failure b/c the channel is full",
+				zap.Error(err),
+			)
+		}
+	}
 
 	go func() { // read
 		for {
@@ -141,14 +174,14 @@ func (p *websocketPump) pumpMessages(
 
 			default:
 				if err := from.SetReadDeadline(utils.Deadline(timeout)); err != nil {
-					failure <- err
-					continue
+					notifyOnFailure(err)
+					return
 				}
 
 				msgType, bytes, err := from.ReadMessage()
 				if err != nil {
-					failure <- err
-					continue
+					notifyOnFailure(err)
+					return
 				}
 
 				messages <- &websocketMessage{
@@ -213,12 +246,12 @@ func (p *websocketPump) pumpMessages(
 				}
 
 				if err := to.SetWriteDeadline(utils.Deadline(timeout)); err != nil {
-					failure <- err
+					notifyOnFailure(err)
 					continue
 				}
 
 				if err := to.WriteMessage(m.msgType, m.bytes); err != nil {
-					failure <- err
+					notifyOnFailure(err)
 					continue
 				}
 

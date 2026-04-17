@@ -23,6 +23,7 @@ OPTIONS:
    --authrpc-healthcheck-threshold-healthy count                                                    count of consecutive successful healthchecks to consider authrpc backend to be healthy (default: 2) [$BPROXY_AUTHRPC_HEALTHCHECK_THRESHOLD_HEALTHY]
    --authrpc-healthcheck-threshold-unhealthy count                                                  count of consecutive failed healthchecks to consider authrpc backend to be unhealthy (default: 2) [$BPROXY_AUTHRPC_HEALTHCHECK_THRESHOLD_UNHEALTHY]
    --authrpc-listen-address host:port                                                               host:port for authrpc proxy (default: "0.0.0.0:8551") [$BPROXY_AUTHRPC_LISTEN_ADDRESS]
+   --authrpc-log-methods methods [ --authrpc-log-methods methods ]                                  only log requests/responses for these jrpc methods (empty = log all) [$BPROXY_AUTHRPC_LOG_METHODS]
    --authrpc-log-requests                                                                           whether to log authrpc requests (default: false) [$BPROXY_AUTHRPC_LOG_REQUESTS]
    --authrpc-log-requests-max-size size                                                             do not log authrpc requests larger than size (default: 4096) [$BPROXY_AUTHRPC_LOG_REQUESTS_MAX_SIZE]
    --authrpc-log-responses                                                                          whether to log responses to proxied/mirrored authrpc requests (default: false) [$BPROXY_AUTHRPC_LOG_RESPONSES]
@@ -88,6 +89,10 @@ OPTIONS:
 
    --metrics-listen-address host:port  host:port for metrics server (default: "0.0.0.0:6785") [$BPROXY_METRICS_LISTEN_ADDRESS]
 
+   PPROF
+
+   --pprof-listen-address host:port  host:port for pprof server [$BPROXY_PPROF_LISTEN_ADDRESS]
+
    RPC
 
    --rpc-backend url                                                                        url of rpc backend (default: "http://127.0.0.1:18545") [$BPROXY_RPC_BACKEND]
@@ -100,6 +105,7 @@ OPTIONS:
    --rpc-healthcheck-threshold-healthy count                                                count of consecutive successful healthchecks to consider rpc backend to be healthy (default: 2) [$BPROXY_RPC_HEALTHCHECK_THRESHOLD_HEALTHY]
    --rpc-healthcheck-threshold-unhealthy count                                              count of consecutive failed healthchecks to consider rpc backend to be unhealthy (default: 2) [$BPROXY_RPC_HEALTHCHECK_THRESHOLD_UNHEALTHY]
    --rpc-listen-address host:port                                                           host:port for rpc proxy (default: "0.0.0.0:8545") [$BPROXY_RPC_LISTEN_ADDRESS]
+   --rpc-log-methods methods [ --rpc-log-methods methods ]                                  only log requests/responses for these jrpc methods (empty = log all) [$BPROXY_RPC_LOG_METHODS]
    --rpc-log-requests                                                                       whether to log rpc requests (default: false) [$BPROXY_RPC_LOG_REQUESTS]
    --rpc-log-requests-max-size size                                                         do not log rpc requests larger than size (default: 4096) [$BPROXY_RPC_LOG_REQUESTS_MAX_SIZE]
    --rpc-log-responses                                                                      whether to log responses to proxied/mirrored rpc requests (default: false) [$BPROXY_RPC_LOG_RESPONSES]

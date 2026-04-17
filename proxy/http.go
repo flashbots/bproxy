@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/flashbots/bproxy/config"
+	"github.com/flashbots/bproxy/jrpc"
 	"github.com/flashbots/bproxy/logutils"
 	"github.com/flashbots/bproxy/metrics"
 	"github.com/flashbots/bproxy/triaged"
@@ -40,6 +41,7 @@ type HTTP struct {
 
 	backendURI               *fasthttp.URI
 	extraMirroredJrpcMethods map[string]struct{}
+	logMethods               map[string]struct{}
 	peerURIs                 map[string]*fasthttp.URI
 
 	healthcheck *healthcheck
@@ -179,6 +181,16 @@ func newHTTP(cfg *httpConfig) (*HTTP, error) {
 			method = strings.TrimSpace(method)
 			if _, known := p.extraMirroredJrpcMethods[method]; !known {
 				p.extraMirroredJrpcMethods[method] = struct{}{}
+			}
+		}
+	}
+
+	if len(cfg.proxy.LogMethods) > 0 {
+		p.logMethods = make(map[string]struct{}, len(cfg.proxy.LogMethods))
+		for _, method := range cfg.proxy.LogMethods {
+			method = strings.TrimSpace(method)
+			if _, known := p.logMethods[method]; !known {
+				p.logMethods[method] = struct{}{}
 			}
 		}
 	}
@@ -361,7 +373,7 @@ func (p *HTTP) Observe(ctx context.Context, o otelapi.Observer) error {
 
 func (p *HTTP) newProxyJob(ctx *fasthttp.RequestCtx) *proxyJob {
 	job := &proxyJob{
-		tsReqReceived: ctx.Time(),
+		tsReqReceived: time.Now(),
 		wg:            &sync.WaitGroup{},
 	}
 
@@ -594,9 +606,10 @@ func (p *HTTP) execProxyJob(job *proxyJob) {
 	}
 
 	{ // add log fields
-		if p.cfg.proxy.LogRequests && len(job.req.Body()) <= p.cfg.proxy.LogRequestsMaxSize {
-			var jsonRequest interface{}
+		if p.cfg.proxy.LogRequests && len(job.req.Body()) <= p.cfg.proxy.LogRequestsMaxSize && p.shouldLogMethod(job.triage.JrpcMethod) {
+			var jsonRequest any
 			if err := json.Unmarshal(job.req.Body(), &jsonRequest); err == nil {
+				jrpc.Sanitize(jsonRequest)
 				loggedFields = append(loggedFields,
 					zap.Any("json_request", jsonRequest),
 				)
@@ -608,7 +621,7 @@ func (p *HTTP) execProxyJob(job *proxyJob) {
 			}
 		}
 
-		if p.cfg.proxy.LogResponses && len(job.res.Body()) <= p.cfg.proxy.LogResponsesMaxSize {
+		if p.cfg.proxy.LogResponses && len(job.res.Body()) <= p.cfg.proxy.LogResponsesMaxSize && p.shouldLogMethod(job.triage.JrpcMethod) {
 			var body []byte
 
 			switch utils.Str(job.res.Header.ContentEncoding()) {
@@ -624,8 +637,9 @@ func (p *HTTP) execProxyJob(job *proxyJob) {
 			}
 
 			if body != nil {
-				var jsonResponse interface{}
+				var jsonResponse any
 				if err := json.Unmarshal(body, &jsonResponse); err == nil {
+					jrpc.Sanitize(jsonResponse)
 					loggedFields = append(loggedFields,
 						zap.Any("json_response", jsonResponse),
 					)
@@ -683,9 +697,10 @@ func (p *HTTP) execMirrorJob(job *mirrorJob) {
 			zap.Int("response_size", len(job.res.Body())),
 		)
 
-		if p.cfg.proxy.LogRequests && len(job.req.Body()) <= p.cfg.proxy.LogRequestsMaxSize {
-			var jsonRequest interface{}
+		if p.cfg.proxy.LogRequests && len(job.req.Body()) <= p.cfg.proxy.LogRequestsMaxSize && p.shouldLogMethod(job.jrpcMethodForMetrics) {
+			var jsonRequest any
 			if err := json.Unmarshal(job.req.Body(), &jsonRequest); err == nil {
+				jrpc.Sanitize(jsonRequest)
 				loggedFields = append(loggedFields,
 					zap.Any("json_request", jsonRequest),
 				)
@@ -701,11 +716,12 @@ func (p *HTTP) execMirrorJob(job *mirrorJob) {
 				zap.Int("http_status", job.res.StatusCode()),
 			)
 
-			if p.cfg.proxy.LogResponses && len(job.res.Body()) <= p.cfg.proxy.LogResponsesMaxSize {
+			if p.cfg.proxy.LogResponses && len(job.res.Body()) <= p.cfg.proxy.LogResponsesMaxSize && p.shouldLogMethod(job.jrpcMethodForMetrics) {
 				switch utils.Str(job.res.Header.ContentEncoding()) {
 				default:
-					var jsonResponse interface{}
+					var jsonResponse any
 					if err := json.Unmarshal(job.res.Body(), &jsonResponse); err == nil {
+						jrpc.Sanitize(jsonResponse)
 						loggedFields = append(loggedFields,
 							zap.Any("json_response", jsonResponse),
 						)
@@ -717,8 +733,9 @@ func (p *HTTP) execMirrorJob(job *mirrorJob) {
 
 				case "gzip":
 					if body, err := job.res.BodyGunzip(); err == nil {
-						var jsonResponse interface{}
+						var jsonResponse any
 						if err := json.Unmarshal(body, &jsonResponse); err == nil {
+							jrpc.Sanitize(jsonResponse)
 							loggedFields = append(loggedFields,
 								zap.Any("json_response", jsonResponse),
 							)
@@ -843,6 +860,14 @@ func (p *HTTP) connectionsCount() int {
 	defer p.mxConnections.Unlock()
 
 	return len(p.connections)
+}
+
+func (p *HTTP) shouldLogMethod(method string) bool {
+	if len(p.logMethods) == 0 {
+		return true // empty = log all
+	}
+	_, ok := p.logMethods[method]
+	return ok
 }
 
 func (p *HTTP) backendUnhealthy(ctx context.Context) {

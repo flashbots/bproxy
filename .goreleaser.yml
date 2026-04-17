@@ -4,6 +4,7 @@ env:
 builds:
   - main: ./cmd
     ldflags:
+      - -buildid=
       - -s
       - -w
       - -X main.version={{ .Version }}
