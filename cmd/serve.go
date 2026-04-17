@@ -12,18 +12,20 @@ import (
 )
 
 const (
-	categoryChaos       = "chaos"
 	categoryAuthrpc     = "authrpc"
+	categoryChaos       = "chaos"
 	categoryFlashblocks = "flashblocks"
-	categoryRPC         = "rpc"
 	categoryMetrics     = "metrics"
+	categoryPprof       = "pprof"
+	categoryRPC         = "rpc"
 )
 
 func CommandServe(cfg *config.Config) *cli.Command {
 	makeProxyFlags := func(
 		cfg *config.HttpProxy, category string, backendURL, listenAddress string,
-	) (flags []cli.Flag, extraMirroredJrpcMethods, peerURLsFlag *cli.StringSlice) {
+	) (flags []cli.Flag, extraMirroredJrpcMethods, logMethodsFlag, peerURLsFlag *cli.StringSlice) {
 		extraMirroredJrpcMethods = &cli.StringSlice{}
+		logMethodsFlag = &cli.StringSlice{}
 		peerURLsFlag = &cli.StringSlice{}
 
 		flags = []cli.Flag{
@@ -205,6 +207,14 @@ func CommandServe(cfg *config.Config) *cli.Command {
 				Value:       4096,
 			},
 
+			&cli.StringSliceFlag{ // --xxx-log-methods
+				Category:    strings.ToUpper(category),
+				Destination: logMethodsFlag,
+				EnvVars:     []string{envPrefix + strings.ToUpper(category) + "_LOG_METHODS"},
+				Name:        category + "-log-methods",
+				Usage:       "only log requests/responses for these jrpc `methods` (empty = log all)",
+			},
+
 			&cli.DurationFlag{ // --xxx-max-backend-connection-wait-timeout
 				Category:    strings.ToUpper(category),
 				Destination: &cfg.MaxBackendConnectionWaitTimeout,
@@ -306,7 +316,7 @@ func CommandServe(cfg *config.Config) *cli.Command {
 		return
 	}
 
-	authrpcFlags, extraMirroredJrpcMethodsAuthRPC, peerURLsAuthRPC := makeProxyFlags(
+	authrpcFlags, extraMirroredJrpcMethodsAuthRPC, logMethodsAuthRPC, peerURLsAuthRPC := makeProxyFlags(
 		cfg.Authrpc.HttpProxy, categoryAuthrpc, "http://127.0.0.1:18551", "0.0.0.0:8551",
 	)
 
@@ -527,7 +537,7 @@ func CommandServe(cfg *config.Config) *cli.Command {
 		},
 	}
 
-	rpcFlags, extraMirroredJrpcMethodsRPC, peerURLsRPC := makeProxyFlags(
+	rpcFlags, extraMirroredJrpcMethodsRPC, logMethodsRPC, peerURLsRPC := makeProxyFlags(
 		cfg.Rpc.HttpProxy, categoryRPC, "http://127.0.0.1:18545", "0.0.0.0:8545",
 	)
 
@@ -542,11 +552,22 @@ func CommandServe(cfg *config.Config) *cli.Command {
 		},
 	}
 
+	pprofFlags := []cli.Flag{ // --pprof-xxx
+		&cli.StringFlag{ // --pprof-listen-address
+			Category:    strings.ToUpper(categoryPprof),
+			Destination: &cfg.Pprof.ListenAddress,
+			EnvVars:     []string{envPrefix + strings.ToUpper(categoryPprof) + "_LISTEN_ADDRESS"},
+			Name:        categoryPprof + "-listen-address",
+			Usage:       "`host:port` for pprof server",
+		},
+	}
+
 	flags := slices.Concat(
 		authrpcFlags,
 		flashblocksFlags,
-		rpcFlags,
 		metricsFlags,
+		pprofFlags,
+		rpcFlags,
 	)
 
 	return &cli.Command{
@@ -557,9 +578,11 @@ func CommandServe(cfg *config.Config) *cli.Command {
 		Before: func(_ *cli.Context) error {
 			cfg.Authrpc.PeerURLs = peerURLsAuthRPC.Value()
 			cfg.Authrpc.ExtraMirroredJrpcMethods = extraMirroredJrpcMethodsAuthRPC.Value()
+			cfg.Authrpc.LogMethods = logMethodsAuthRPC.Value()
 
 			cfg.Rpc.PeerURLs = peerURLsRPC.Value()
 			cfg.Rpc.ExtraMirroredJrpcMethods = extraMirroredJrpcMethodsRPC.Value()
+			cfg.Rpc.LogMethods = logMethodsRPC.Value()
 
 			return cfg.Validate()
 		},
