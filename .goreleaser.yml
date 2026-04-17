@@ -4,9 +4,12 @@ env:
 builds:
   - main: ./cmd
     ldflags:
+      - -buildid=
       - -s
       - -w
       - -X main.version={{ .Version }}
+    flags:
+      - -trimpath
     targets:
       - linux_amd64
       - linux_arm64
