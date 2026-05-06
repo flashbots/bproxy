@@ -675,7 +675,10 @@ func (p *HTTP) execProxyJob(job *proxyJob) {
 			job.log.Error("Failed to proxy the request", loggedFields...)
 		} else if job.triage.Proxy {
 			metrics.ProxySuccessCount.Add(context.TODO(), 1, metricAttributes)
-			job.log.Info("Proxied the request", loggedFields...)
+			// emit success logs only when triage enriched the request with detail
+			if len(job.triage.Transactions) > 0 || !job.triage.Deadline.IsZero() {
+				job.log.Info("Proxied the request", loggedFields...)
+			}
 		} else {
 			metrics.ProxyFakeCount.Add(context.TODO(), 1, metricAttributes)
 			job.log.Info("Faked the request", loggedFields...)
