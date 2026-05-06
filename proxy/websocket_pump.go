@@ -317,7 +317,6 @@ func (p *websocketPump) prepareLogFields(
 					Nonce: tx.Nonce(),
 				})
 			} else {
-				_, _, err := jrpc.DecodeEthRawTransaction(strTx)
 				errs = append(errs, err)
 			}
 
