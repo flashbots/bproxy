@@ -200,8 +200,6 @@ func (p *websocketPump) pumpMessages(
 				return
 
 			case m := <-messages:
-				loggedFields := make([]zap.Field, 0, 6)
-
 				if p.cfg.proxy.Chaos.Enabled { // inject chaos
 					dropMessage := rand.Float64() < p.cfg.proxy.Chaos.DroppedMessageProbability/100
 					injectInvalidFlashblockPayload := rand.Float64() < p.cfg.proxy.Chaos.InjectedInvalidFlashblockPayloadProbability/100
@@ -216,9 +214,9 @@ func (p *websocketPump) pumpMessages(
 
 					if injectInvalidFlashblockPayload { // inject invalid flashblock payload
 						if err := m.chaosMangle(); err == nil {
-							loggedFields = append(loggedFields,
+							l.Info("Injected invalid flashblock payload", p.prepareLogFields(m,
 								zap.Bool("chaos_injected_invalid_flashblock_payload", true),
-							)
+							)...)
 						} else {
 							l.Warn("Failed to generate invalid flashblock payload",
 								zap.Error(err),
@@ -227,42 +225,47 @@ func (p *websocketPump) pumpMessages(
 					}
 
 					if injectMalformedJsonMessage { // inject malformed json
-						loggedFields = append(loggedFields,
-							zap.Bool("chaos_injected_malformed_json_message", true),
-						)
 						m.bytes = m.bytes[1 : len(m.bytes)-1]
+						l.Info("Injected malformed JSON message", p.prepareLogFields(m,
+							zap.Bool("chaos_injected_malformed_json_message", true),
+						)...)
 					}
 
-					{ // chaos-inject latency
-						if p.cfg.proxy.Chaos.MinInjectedLatency > 0 || p.cfg.proxy.Chaos.MaxInjectedLatency > 0 {
-							loggedFields = append(loggedFields,
-								zap.Bool("chaos_injected_latency", true),
-							)
-							latency := time.Duration(rand.Int64N(int64(p.cfg.proxy.Chaos.MaxInjectedLatency) + 1))
-							latency = max(latency, p.cfg.proxy.Chaos.MinInjectedLatency)
-							time.Sleep(latency - time.Since(m.ts))
-						}
+					if p.cfg.proxy.Chaos.MinInjectedLatency > 0 || p.cfg.proxy.Chaos.MaxInjectedLatency > 0 { // chaos-inject latency
+						latency := time.Duration(rand.Int64N(int64(p.cfg.proxy.Chaos.MaxInjectedLatency) + 1))
+						latency = max(latency, p.cfg.proxy.Chaos.MinInjectedLatency)
+						time.Sleep(latency - time.Since(m.ts))
+						l.Info("Injected latency", p.prepareLogFields(m,
+							zap.Bool("chaos_injected_latency", true),
+							zap.Duration("chaos_latency", latency),
+						)...)
 					}
 				}
 
 				if err := to.SetWriteDeadline(utils.Deadline(timeout)); err != nil {
+					l.Error("Failed to set write deadline",
+						zap.Int("message_type", m.msgType),
+						zap.Int("message_size", len(m.bytes)),
+						zap.Error(err),
+					)
 					notifyOnFailure(err)
 					continue
 				}
 
 				if err := to.WriteMessage(m.msgType, m.bytes); err != nil {
+					l.Error("Failed to write websocket message",
+						zap.Int("message_type", m.msgType),
+						zap.Int("message_size", len(m.bytes)),
+						zap.Error(err),
+					)
 					notifyOnFailure(err)
 					continue
 				}
 
-				{ // emit logs and metrics
-					metrics.ProxySuccessCount.Add(context.TODO(), 1, otelapi.WithAttributes(
-						attribute.KeyValue{Key: "proxy", Value: attribute.StringValue(p.cfg.name)},
-						attribute.KeyValue{Key: "direction", Value: attribute.StringValue(direction)},
-					))
-
-					l.Info("Proxied message", p.prepareLogFields(m, loggedFields...)...)
-				}
+				metrics.ProxySuccessCount.Add(context.TODO(), 1, otelapi.WithAttributes(
+					attribute.KeyValue{Key: "proxy", Value: attribute.StringValue(p.cfg.name)},
+					attribute.KeyValue{Key: "direction", Value: attribute.StringValue(direction)},
+				))
 			}
 		}
 	}()
