@@ -201,6 +201,8 @@ func (p *websocketPump) pumpMessages(
 				return
 
 			case m := <-messages:
+				loggedFields := make([]zap.Field, 0, 6)
+
 				if p.cfg.proxy.Chaos.Enabled { // inject chaos
 					dropMessage := rand.Float64() < p.cfg.proxy.Chaos.DroppedMessageProbability/100
 					injectInvalidFlashblockPayload := rand.Float64() < p.cfg.proxy.Chaos.InjectedInvalidFlashblockPayloadProbability/100
@@ -215,9 +217,9 @@ func (p *websocketPump) pumpMessages(
 
 					if injectInvalidFlashblockPayload { // inject invalid flashblock payload
 						if err := m.chaosMangle(); err == nil {
-							l.Info("Injected invalid flashblock payload", p.prepareLogFields(m,
+							loggedFields = append(loggedFields,
 								zap.Bool("chaos_injected_invalid_flashblock_payload", true),
-							)...)
+							)
 						} else {
 							l.Warn("Failed to generate invalid flashblock payload",
 								zap.Error(err),
@@ -226,20 +228,21 @@ func (p *websocketPump) pumpMessages(
 					}
 
 					if injectMalformedJsonMessage { // inject malformed json
-						m.bytes = m.bytes[1 : len(m.bytes)-1]
-						l.Info("Injected malformed JSON message", p.prepareLogFields(m,
+						loggedFields = append(loggedFields,
 							zap.Bool("chaos_injected_malformed_json_message", true),
-						)...)
+						)
+						m.bytes = m.bytes[1 : len(m.bytes)-1]
 					}
 
-					if p.cfg.proxy.Chaos.MinInjectedLatency > 0 || p.cfg.proxy.Chaos.MaxInjectedLatency > 0 { // chaos-inject latency
-						latency := time.Duration(rand.Int64N(int64(p.cfg.proxy.Chaos.MaxInjectedLatency) + 1))
-						latency = max(latency, p.cfg.proxy.Chaos.MinInjectedLatency)
-						time.Sleep(latency - time.Since(m.ts))
-						l.Info("Injected latency", p.prepareLogFields(m,
-							zap.Bool("chaos_injected_latency", true),
-							zap.Duration("chaos_latency", latency),
-						)...)
+					{ // chaos-inject latency
+						if p.cfg.proxy.Chaos.MinInjectedLatency > 0 || p.cfg.proxy.Chaos.MaxInjectedLatency > 0 {
+							loggedFields = append(loggedFields,
+								zap.Bool("chaos_injected_latency", true),
+							)
+							latency := time.Duration(rand.Int64N(int64(p.cfg.proxy.Chaos.MaxInjectedLatency) + 1))
+							latency = max(latency, p.cfg.proxy.Chaos.MinInjectedLatency)
+							time.Sleep(latency - time.Since(m.ts))
+						}
 					}
 				}
 
@@ -259,7 +262,7 @@ func (p *websocketPump) pumpMessages(
 						attribute.KeyValue{Key: "direction", Value: attribute.StringValue(direction)},
 					))
 
-					l.Debug("Proxied message", p.prepareLogFields(m)...)
+					l.Debug("Proxied message", p.prepareLogFields(m, loggedFields...)...)
 				}
 			}
 		}
