@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"math/rand/v2"
 	"strings"
 	"sync/atomic"
@@ -243,22 +244,12 @@ func (p *websocketPump) pumpMessages(
 				}
 
 				if err := to.SetWriteDeadline(utils.Deadline(timeout)); err != nil {
-					l.Error("Failed to set write deadline",
-						zap.Int("message_type", m.msgType),
-						zap.Int("message_size", len(m.bytes)),
-						zap.Error(err),
-					)
-					notifyOnFailure(err)
+					notifyOnFailure(fmt.Errorf("set write deadline (msg_type=%d, msg_size=%d): %w", m.msgType, len(m.bytes), err))
 					continue
 				}
 
 				if err := to.WriteMessage(m.msgType, m.bytes); err != nil {
-					l.Error("Failed to write websocket message",
-						zap.Int("message_type", m.msgType),
-						zap.Int("message_size", len(m.bytes)),
-						zap.Error(err),
-					)
-					notifyOnFailure(err)
+					notifyOnFailure(fmt.Errorf("write message (msg_type=%d, msg_size=%d): %w", m.msgType, len(m.bytes), err))
 					continue
 				}
 
