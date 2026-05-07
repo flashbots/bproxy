@@ -675,7 +675,7 @@ func (p *HTTP) execProxyJob(job *proxyJob) {
 			job.log.Error("Failed to proxy the request", loggedFields...)
 		} else if job.triage.Proxy {
 			metrics.ProxySuccessCount.Add(context.TODO(), 1, metricAttributes)
-			job.log.Info("Proxied the request", loggedFields...)
+			job.log.Debug("Proxied the request", loggedFields...)
 		} else {
 			metrics.ProxyFakeCount.Add(context.TODO(), 1, metricAttributes)
 			job.log.Info("Faked the request", loggedFields...)
@@ -706,6 +706,7 @@ func (p *HTTP) execMirrorJob(job *mirrorJob) {
 				)
 			} else {
 				loggedFields = append(loggedFields,
+					zap.NamedError("error_unmarshal", err),
 					zap.String("http_request", utils.Str(job.req.Body())),
 				)
 			}
@@ -767,7 +768,7 @@ func (p *HTTP) execMirrorJob(job *mirrorJob) {
 		)
 
 		if err == nil {
-			job.log.Info("Mirrored the request", loggedFields...)
+			job.log.Debug("Mirrored the request", loggedFields...)
 			metrics.MirrorSuccessCount.Add(context.TODO(), 1, metricAttributes)
 		} else {
 			job.log.Error("Failed to mirror the request", loggedFields...)
