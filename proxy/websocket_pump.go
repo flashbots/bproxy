@@ -262,10 +262,14 @@ func (p *websocketPump) pumpMessages(
 					continue
 				}
 
-				metrics.ProxySuccessCount.Add(context.TODO(), 1, otelapi.WithAttributes(
-					attribute.KeyValue{Key: "proxy", Value: attribute.StringValue(p.cfg.name)},
-					attribute.KeyValue{Key: "direction", Value: attribute.StringValue(direction)},
-				))
+				{ // emit logs and metrics
+					metrics.ProxySuccessCount.Add(context.TODO(), 1, otelapi.WithAttributes(
+						attribute.KeyValue{Key: "proxy", Value: attribute.StringValue(p.cfg.name)},
+						attribute.KeyValue{Key: "direction", Value: attribute.StringValue(direction)},
+					))
+
+					l.Debug("Proxied message", p.prepareLogFields(m)...)
+				}
 			}
 		}
 	}()
