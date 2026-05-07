@@ -689,7 +689,78 @@ func (p *HTTP) execMirrorJob(job *mirrorJob) {
 
 	err := p.peer.Do(job.req, job.res)
 
-	{ // emit metrics
+	loggedFields := make([]zap.Field, 0, 12)
+	{ // add log fields
+		loggedFields = append(loggedFields,
+			zap.String("mirror_host", job.host),
+			zap.Int("request_size", len(job.req.Body())),
+			zap.Int("response_size", len(job.res.Body())),
+		)
+
+		if p.cfg.proxy.LogRequests && len(job.req.Body()) <= p.cfg.proxy.LogRequestsMaxSize && p.shouldLogMethod(job.jrpcMethodForMetrics) {
+			var jsonRequest any
+			if err := json.Unmarshal(job.req.Body(), &jsonRequest); err == nil {
+				jrpc.Sanitize(jsonRequest)
+				loggedFields = append(loggedFields,
+					zap.Any("json_request", jsonRequest),
+				)
+			} else {
+				loggedFields = append(loggedFields,
+					zap.NamedError("error_unmarshal", err),
+					zap.String("http_request", utils.Str(job.req.Body())),
+				)
+			}
+		}
+
+		if err == nil {
+			loggedFields = append(loggedFields,
+				zap.Int("http_status", job.res.StatusCode()),
+			)
+
+			if p.cfg.proxy.LogResponses && len(job.res.Body()) <= p.cfg.proxy.LogResponsesMaxSize && p.shouldLogMethod(job.jrpcMethodForMetrics) {
+				switch utils.Str(job.res.Header.ContentEncoding()) {
+				default:
+					var jsonResponse any
+					if err := json.Unmarshal(job.res.Body(), &jsonResponse); err == nil {
+						jrpc.Sanitize(jsonResponse)
+						loggedFields = append(loggedFields,
+							zap.Any("json_response", jsonResponse),
+						)
+					} else {
+						loggedFields = append(loggedFields,
+							zap.String("http_response", utils.Str(job.res.Body())),
+						)
+					}
+
+				case "gzip":
+					if body, err := job.res.BodyGunzip(); err == nil {
+						var jsonResponse any
+						if err := json.Unmarshal(body, &jsonResponse); err == nil {
+							jrpc.Sanitize(jsonResponse)
+							loggedFields = append(loggedFields,
+								zap.Any("json_response", jsonResponse),
+							)
+						} else {
+							loggedFields = append(loggedFields,
+								zap.String("http_response", utils.Str(body)),
+							)
+						}
+					} else {
+						loggedFields = append(loggedFields,
+							zap.NamedError("error_gzip", err),
+							zap.String("hex_response", hex.EncodeToString(job.res.Body())),
+						)
+					}
+				}
+			}
+		} else {
+			loggedFields = append(loggedFields,
+				zap.NamedError("error_mirror", err),
+			)
+		}
+	}
+
+	{ // emit logs and metrics
 		metricAttributes := otelapi.WithAttributes(
 			attribute.KeyValue{Key: "proxy", Value: attribute.StringValue(p.cfg.name)},
 			attribute.KeyValue{Key: "mirror_host", Value: attribute.StringValue(job.host)},
@@ -697,37 +768,14 @@ func (p *HTTP) execMirrorJob(job *mirrorJob) {
 		)
 
 		if err == nil {
-			job.log.Debug("Mirrored the request",
-				zap.String("mirror_host", job.host),
-				zap.Int("request_size", len(job.req.Body())),
-				zap.Int("response_size", len(job.res.Body())),
-			)
+			job.log.Debug("Mirrored the request", loggedFields...)
 			metrics.MirrorSuccessCount.Add(context.TODO(), 1, metricAttributes)
 		} else {
-			// log err
-			loggedFields := []zap.Field{
-				zap.String("mirror_host", job.host),
-				zap.Int("request_size", len(job.req.Body())),
-				zap.NamedError("error_mirror", err),
-			}
-
-			if p.cfg.proxy.LogRequests && len(job.req.Body()) <= p.cfg.proxy.LogRequestsMaxSize && p.shouldLogMethod(job.jrpcMethodForMetrics) {
-				var jsonRequest any
-				if err := json.Unmarshal(job.req.Body(), &jsonRequest); err == nil {
-					jrpc.Sanitize(jsonRequest)
-					loggedFields = append(loggedFields, zap.Any("json_request", jsonRequest))
-				} else {
-					loggedFields = append(loggedFields,
-						zap.NamedError("error_unmarshal", err),
-						zap.String("http_request", utils.Str(job.req.Body())),
-					)
-				}
-			}
-
 			job.log.Error("Failed to mirror the request", loggedFields...)
-			_ = job.log.Sync()
 			metrics.MirrorFailureCount.Add(context.TODO(), 1, metricAttributes)
 		}
+
+		_ = job.log.Sync()
 	}
 }
 
