@@ -261,7 +261,7 @@ func (p *websocketPump) pumpMessages(
 						attribute.KeyValue{Key: "direction", Value: attribute.StringValue(direction)},
 					))
 
-					l.Info("Proxied message", p.prepareLogFields(m, loggedFields...)...)
+					l.Debug("Proxied message", p.prepareLogFields(m, loggedFields...)...)
 				}
 			}
 		}
@@ -314,7 +314,6 @@ func (p *websocketPump) prepareLogFields(
 					Nonce: tx.Nonce(),
 				})
 			} else {
-				_, _, err := jrpc.DecodeEthRawTransaction(strTx)
 				errs = append(errs, err)
 			}
 
